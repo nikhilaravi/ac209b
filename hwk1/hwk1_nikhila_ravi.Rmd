@@ -32,9 +32,8 @@ ggplot(taxi_train, aes(x = TimeMin, y = PickupCount)) +
 ### Helper functions
 
 ```{r}
-rsq = function(model, data, y) {
-  y <- data[[y]]
-  predict <- predict(model, newdata = data)
+rsq = function(y ,predict) {
+  predict[is.na(predict)] <- 0
   tss = sum((y - mean(y))^2)
   rss = sum((y-predict)^2)
   rsq_ = max(0, 1 - rss/tss)
@@ -45,14 +44,14 @@ rsq = function(model, data, y) {
 ### Regression models: polynomials
 
 ```{r}
-poly_3 <- lm(PickupCount ~ poly(TimeMin, degree = 3, raw = TRUE), data = taxi_train)
+poly_5 <- lm(PickupCount ~ poly(TimeMin, degree = 5, raw = TRUE), data = taxi_train)
 poly_10 <- lm(PickupCount ~ poly(TimeMin, degree = 10, raw = TRUE), data = taxi_train)
 poly_25 <- lm(PickupCount ~ poly(TimeMin, degree = 25, raw = TRUE), data = taxi_train)
 
-taxi.predict <- data.frame(taxi_train, pred_3 = predict(poly_3), pred_10 = predict(poly_10), pred_25 = predict(poly_25))
+taxi.predict <- data.frame(taxi_train, pred_5 = predict(poly_5), pred_10 = predict(poly_10), pred_25 = predict(poly_25))
 ggplot(taxi.predict, aes(x = TimeMin, y=PickupCount)) + 
   geom_point() + 
-  geom_line(aes(y = pred_3), colour="blue") + 
+  geom_line(aes(y = pred_5), colour="blue") + 
   geom_line(aes(y = pred_10), colour = "green") + 
   geom_line(aes(y = pred_25), colour = "red") + 
   ylab(label="PickupCount") + 
@@ -62,9 +61,13 @@ ggplot(taxi.predict, aes(x = TimeMin, y=PickupCount)) +
 #### Analyse the R2 of the models 
 
 ```{r}
-accuracy <- data.frame('model'='3rd degree poly', 'train_rsquared'=rsq(poly_3, taxi_train,'PickupCount'), 'test_rsquared'=rsq(poly_3, taxi_test,'PickupCount'))
-accuracy <- rbind(accuracy, data.frame('model' = '10th degree poly', 'train_rsquared'=rsq(poly_10, taxi_train,'PickupCount'), 'test_rsquared'=rsq(poly_10, taxi_test,'PickupCount')))
-accuracy <- rbind(accuracy, data.frame('model' = '25th degree poly', 'train_rsquared'=rsq(poly_25, taxi_train,'PickupCount'), 'test_rsquared'=rsq(poly_25, taxi_test,'PickupCount')))
+accuracy <- data.frame('model'='5th degree poly', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(poly_5, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(poly_5, newdata=taxi_test)))
+
+
+accuracy <- rbind(accuracy, data.frame('model' = '10th degree poly', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(poly_10, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(poly_10, newdata=taxi_test))))
+
+
+accuracy <- rbind(accuracy, data.frame('model' = '25th degree poly', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(poly_25, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(poly_25, newdata=taxi_test))))
 ```
 
 ### Regression models: cubic b splines
@@ -74,7 +77,7 @@ library(splines)
 quarts = quantile(taxi_train$TimeMin,probs=c(0.4,0.5,0.7))
 cubicbspline=lm(PickupCount~bs(TimeMin,knots=quarts),data=taxi_train)
 
-accuracy <- rbind(accuracy, data.frame('model' = 'Cubic spline', 'train_rsquared'=rsq(cubicbspline, taxi_train,'PickupCount'), 'test_rsquared'=rsq(cubicbspline, taxi_test,'PickupCount')))
+accuracy <- rbind(accuracy, data.frame('model' = 'Cubic spline', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(cubicbspline, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(cubicbspline, newdata=taxi_test))))
 
 
 taxi.predict['cubicsplinepred'] <- predict(cubicbspline)
@@ -103,8 +106,8 @@ taxi_train$splits <- cut(sample(1:nrow(taxi_train),
 
 model.performance <- function(df, train, test) {
     mod <- lm(PickupCount ~ ns(TimeMin, df = df), data = train)
-    c(train.r2 = rsq(mod, train, "PickupCount"),
-      test.r2 = rsq(mod, test, "PickupCount"))
+    c(train.r2 = rsq(train$PickupCount, predict(mod, newdata=train)),
+      test.r2 = rsq(test$PickupCount, predict(mod, newdata=test)))
 }
 
 ## iterate over the splits, holding each one out as the test set.
@@ -143,7 +146,7 @@ ggplot(perform.5fold, aes(x = df, y = rsquare, color = data)) +
 
 ```{r}
 nspline <- lm(PickupCount ~ ns(TimeMin, df = 6), data = taxi_train)
-accuracy <- rbind(accuracy, data.frame('model' = 'Natural Cubic spline with 6 degree of freedom', 'train_rsquared'=rsq(nspline, taxi_train,'PickupCount'), 'test_rsquared'=rsq(nspline, taxi_test,'PickupCount')))
+accuracy <- rbind(accuracy, data.frame('model' = 'Natural Cubic spline with 6 degree of freedom', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(nspline, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(nspline, newdata=taxi_test))))
 accuracy
 ```
 
@@ -196,8 +199,8 @@ for(split in data_set$splits) {
   
   for(sp in spans) {
     mod <- loess(PickupCount ~ TimeMin, span = sp, data = mt.train)
-    train.r2 <- c(train.r2, rsq(mod, mt.train, "PickupCount"))
-    test.r2 <- c(test.r2, rsq(mod, mt.test, "PickupCount"))
+    train.r2 <- c(train.r2, rsq(mt.train$PickupCount, predict(mod, newdata=mt.train)))
+    test.r2 <- c(test.r2, rsq(mt.test$PickupCount, predict(mod, newdata=mt.test)))
   }
   
   loess.r2 <- data.frame(span = c(spans, spans),
@@ -220,55 +223,16 @@ ggplot(perform.5fold, aes(x = span, y = x)) +
 }
 ```
 
-
 ```{r}
-spans <- seq(0.1, 0.8, by = 0.1)
-
-## iterate over the splits, holding each one out as the test set.
-perform.5fold <- list()
-for(split in taxi_train$splits) {
-  train <- taxi_train$split == split
-  mt.train <- taxi_train[train, ]
-  mt.test <- taxi_train[-train, ]
-  
-  train.r2 <- c()
-  test.r2 <- c()
-  
-  for(sp in spans) {
-    mod <- loess(PickupCount ~ TimeMin, span = sp, data = mt.train)
-    train.r2 <- c(train.r2, rsq(mod, mt.train, "PickupCount"))
-    test.r2 <- c(test.r2, rsq(mod, mt.test, "PickupCount"))
-  }
-  
-  loess.r2 <- data.frame(span = c(spans, spans),
-                       set = rep(c("train", "test"), each = length(spans)),
-                       r2 = c(train.r2, test.r2))
-  perform.5fold <- c(perform.5fold, list(loess.r2))
-}
-
-## collect the k sets of model statistics in a data.frame
-perform.5fold <- do.call(rbind, perform.5fold)
-
-## aggregate across the k sets, averaging model statistics for each df
-perform.5fold <- aggregate(perform.5fold$r2, perform.5fold[c("span", "set")], FUN = mean)
-
-## plot the results
-ggplot(perform.5fold, aes(x = span, y = x, color = set)) +
-  geom_point() +
-  geom_line() +
-  ylab(expression(R^2))
+loess_5foldcv(taxi_train)
 ```
 
 A span of 0.1 has the highest R^2 value. 
 
 ```{r}
 loess_model <- loess(PickupCount ~ TimeMin, span = 0.1, data = taxi_train)
-accuracy <- rbind(accuracy, data.frame('model' = 'Locally weighted regression model', 'train_rsquared'=rsq(loess_model, taxi_train,'PickupCount'), 'test_rsquared'=rsq(loess_model, taxi_test,'PickupCount')))
+accuracy <- rbind(accuracy, data.frame('model' = 'Locally weighted regression model', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(loess_model, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(loess_model, newdata=taxi_test$TimeMin))))
 accuracy
-```
-
-```{r}
-rsq(loess_model, taxi_train,'PickupCount')
 ```
 
 ### Part 1b: Adapting to Weekends
@@ -324,11 +288,16 @@ weekday_model = loess(PickupCount ~ TimeMin, span = 0.1, data = weekday_train_df
 #### Comparison of R2 values of the new models on the separated test sets compared to model fit on the entire test set
 
 ```{r}
-loess_accuracy <- data.frame('model'='loess', 'test_rsquared'=rsq(loess_model, taxi_test,'PickupCount'))
-loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess weekday model on weekday test set', 'test_rsquared'=rsq(weekday_model, weekday_test_df,'PickupCount')))
-loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess weekend model on weekend test set', 'test_rsquared'=rsq(weekend_model, weekend_test_df,'PickupCount')))
-loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess model on weekend test set', 'test_rsquared'=rsq(loess_model, weekend_test_df,'PickupCount')))
-loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess model on weekday test set', 'test_rsquared'=rsq(loess_model, weekday_test_df,'PickupCount')))
+loess_accuracy <- data.frame('model'='loess', 'test_rsquared'=rsq(taxi_test$PickupCount, predict(loess_model, newdata = taxi_test)))
+
+loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess weekday model on weekday test set', 'test_rsquared'=rsq(weekday_test_df$PickupCount, predict(weekday_model, newdata = weekday_test_df))))
+
+loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess weekend model on weekend test set', 'test_rsquared'=rsq(weekend_test_df$PickupCount, predict(weekend_model, newdata = weekend_test_df))))
+
+loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess model on weekend test set', 'test_rsquared'=rsq(weekend_test_df$PickupCount, predict(loess_model, newdata = weekend_test_df))))
+
+loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess model on weekday test set', 'test_rsquared'=rsq(weekday_test_df$PickupCount, predict(loess_model, newdata = weekday_test_df))))
+
 ```
 
 ```{r}
@@ -337,5 +306,55 @@ loess_accuracy
 
 ### Problem 2: Predicting Crime in the City
 
+```{r}
+crime_train <- read.table('dataset_2_train.txt', sep = '\t', header =TRUE)
+crime_test <- read.table('dataset_2_test.txt', sep = '\t', header =TRUE)
+crime_train
+crime_test
+```
+```{r}
+library(ggplot2)
+for (pred in names(crime_train)){
+  if (pred != "ViolentCrimesPerPop"){
+    print(ggplot(crime_train, aes_string(x = pred, y = "ViolentCrimesPerPop")) +
+  geom_point() +
+    ggtitle('Predictor ', pred))
+  }
+}
+```
+
+Examining the relationship between the crime rate and the individual predictors it is clear that the predictors all have different effects on the response variable. In particular the PercentageUrban has a highly non linear effect. Most communities are either completely urban or completely rural and there are few communities in the spectrum between the extremes. There is also a wide distribution of violent crimes in each of these groups of communities. 
+
+It is clear that a non linear regression model is required. 
+
+### Polynomial Regression 
+
+```{r}
+library(splines)
 
 
+lin_model <- lm(ViolentCrimesPerPop ~ ., data = crime_train)
+
+
+poly_2 <- lm(ViolentCrimesPerPop ~ poly(Population, degree = 2, raw = TRUE) + poly(PercentageBlack, degree = 2, raw = TRUE) + poly(PercentageWhite, degree = 2, raw = TRUE) + poly(PercentageAsian, degree = 2, raw = TRUE)+ poly(PercentageHispanic, degree = 2, raw = TRUE)+ poly(PercentageUrban, degree = 2, raw = TRUE)+ poly(MedIncome, degree = 2, raw = TRUE), data = crime_train)
+
+
+poly_3 <- lm(ViolentCrimesPerPop ~ poly(Population, degree = 3, raw = TRUE) + poly(PercentageBlack, degree = 3, raw = TRUE) + poly(PercentageWhite, degree = 3, raw = TRUE) + poly(PercentageAsian, degree = 3, raw = TRUE)+ poly(PercentageHispanic, degree = 3, raw = TRUE)+ poly(PercentageUrban, degree = 3, raw = TRUE)+ poly(MedIncome, degree = 3, raw = TRUE), data = crime_train)
+
+
+bspline=lm(ViolentCrimesPerPop ~ bs(Population,df=3) + bs(PercentageBlack,df=3) + bs(PercentageWhite,df=3) + bs(PercentageAsian,df=3) + bs(PercentageHispanic,df=3) + bs(PercentageUrban,df=3) + bs(MedIncome,df=3), data=crime_train)
+
+
+crime.model.performance <- function(model) {
+     c(train.r2 = rsq(crime_train$ViolentCrimesPerPop, predict(model, newdata=crime_train)),
+      test.r2 = rsq(crime_test$ViolentCrimesPerPop, predict(model, newdata=crime_test)))
+}
+
+crime_accuracy <- data.frame(t(sapply(list(lin_model, poly_2, poly_3, bspline), crime.model.performance)))
+crime_accuracy['models'] = c("lin_model", "poly_2", "poly_3", "bspline")
+crime_accuracy
+```
+
+The bspline and 3rd degree polynomial models have the best performance on the testing set due to their ability to model the highly non linear effects of the predictors on the outcome variable. 
+
+### Part 2b
