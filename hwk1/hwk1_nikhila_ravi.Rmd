@@ -335,7 +335,6 @@ library(splines)
 
 lin_model <- lm(ViolentCrimesPerPop ~ ., data = crime_train)
 
-
 poly_2 <- lm(ViolentCrimesPerPop ~ poly(Population, degree = 2, raw = TRUE) + poly(PercentageBlack, degree = 2, raw = TRUE) + poly(PercentageWhite, degree = 2, raw = TRUE) + poly(PercentageAsian, degree = 2, raw = TRUE)+ poly(PercentageHispanic, degree = 2, raw = TRUE)+ poly(PercentageUrban, degree = 2, raw = TRUE)+ poly(MedIncome, degree = 2, raw = TRUE), data = crime_train)
 
 
@@ -357,4 +356,91 @@ crime_accuracy
 
 The bspline and 3rd degree polynomial models have the best performance on the testing set due to their ability to model the highly non linear effects of the predictors on the outcome variable. 
 
-### Part 2b
+### Part 2b: GAM models
+
+```{r}
+library(gam)
+loess_gam = function(data_set){
+  data_set$splits <- cut(sample(1:nrow(data_set), 
+                            nrow(data_set)), 
+                     breaks = 5, 
+                     labels = FALSE)
+  spans <- seq(0.1, 0.8, by = 0.1)
+
+## iterate over the splits, holding each one out as the test set.
+perform.5fold <- list()
+for(split in data_set$splits) {
+  train <- data_set$split == split
+  mt.train <- data_set[train, ]
+  mt.test <- data_set[-train, ]
+  
+  train.r2 <- c()
+  test.r2 <- c()
+  
+  for(sp in spans) {
+      mod <- gam(ViolentCrimesPerPop ~ s(Population, spar = sp) + s(PercentageBlack, spar = sp) + s(PercentageWhite, spar = sp) + s(PercentageAsian, spar = sp) + s(PercentageHispanic, spar = sp) + s(PercentageUrban, spar = sp) + s(MedIncome, spar = sp), data = mt.train)
+    train.r2 <- c(train.r2, rsq(mt.train$ViolentCrimesPerPop, predict(mod, newdata=mt.train)))
+    test.r2 <- c(test.r2, rsq(mt.test$ViolentCrimesPerPop, predict(mod, newdata=mt.test)))
+  }
+  
+  loess.r2 <- data.frame(span = c(spans, spans),
+                       set = rep(c("train", "test"), each = length(spans)),
+                       r2 = c(train.r2, test.r2))
+  perform.5fold <- c(perform.5fold, list(loess.r2))
+}
+
+## collect the k sets of model statistics in a data.frame
+perform.5fold <- do.call(rbind, perform.5fold)
+
+## aggregate across the k sets, averaging model statistics for each df
+perform.5fold <- aggregate(perform.5fold$r2, perform.5fold[c("span", "set")], FUN = mean)
+
+## plot the results
+ggplot(perform.5fold, aes(x = span, y = x)) +
+  geom_point() +
+  geom_line() +
+  ylab(expression(R^2))
+}
+```
+
+
+```{r}
+loess_gam(crime_train)
+```
+
+Select a spar of 0.8 and fit the GAM to the model 
+
+```{r}
+
+gam_0 = gam(ViolentCrimesPerPop ~ 1, data=crime_train)
+
+gam_model = gam(ViolentCrimesPerPop ~ s(Population, spar = 0.8) + s(PercentageBlack, spar = 0.8) + s(PercentageWhite, spar = 0.8) + s(PercentageAsian, spar = 0.8) + s(PercentageHispanic, spar = 0.8) + s(PercentageUrban, spar = 0.8) + s(MedIncome, spar = 0.8), data = crime_train)
+
+crime_accuracy <- rbind(crime_accuracy, data.frame('models'='Gam model', 'train.r2' = rsq(crime_train$ViolentCrimesPerPop, predict(gam_model, newdata=crime_train)),
+      'test.r2' = rsq(crime_test$ViolentCrimesPerPop, predict(gam_model, newdata=crime_test))))
+```
+
+
+```{r}
+plot(gam_model, se=TRUE)
+```
+
+```{r}
+gam_model$coefficients
+```
+
+
+The GAM model has a higher R2 than all the 
+
+
+## Likelihood ratio to compare GAM with linear regression model 
+
+```{r}
+print(anova(lin_model,gam_model,test='Chi'))
+```
+
+```{r}
+gam_model_refined = gam(ViolentCrimesPerPop ~ s(Population, spar = 0.8) + s(PercentageBlack, spar = 0.8) + s(PercentageWhite, spar = 0.8) + s(PercentageHispanic, spar = 0.8) + s(MedIncome, spar = 0.8), data = crime_train)
+print(anova(gam_model_refined,gam_model,test='Chi'))
+```
+
