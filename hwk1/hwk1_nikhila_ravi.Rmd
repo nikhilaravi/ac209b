@@ -1,31 +1,44 @@
 ---
 title: "Hwk2_nikhila_ravi"
-output: pdf_document
+author: Nikhila Ravi
+date: Feb 8th 2017
+output: 
+  pdf_document:
+    df_print: kable
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, warning = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE, tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
 ```
 
 ## Question 1
 
 ### Load the data:
 
-```{r cars}
+```{r }
 taxi_train <- read.table('dataset_1_train.txt', sep = ',', header =TRUE)
 taxi_test <- read.table('dataset_1_test.txt', sep = ',', header =TRUE)
-taxi_train
 ```
 
 ### Visualise the data:
 
-```{r cars}
+```{r }
 library(ggplot2)
-ggplot(taxi_train, aes(x = DayOfWeek, y = PickupCount)) + 
-  geom_point()
 ggplot(taxi_train, aes(x = TimeMin, y = PickupCount)) + 
-  geom_point()
+  geom_point() +
+  ggtitle('training')
+
+ggplot(taxi_test, aes(x = TimeMin, y = PickupCount, color='red')) + 
+  geom_point() +
+  ggtitle('testing')
 ```
+
+As expected during the early morning (250 min) there are low number of pickups, with the number of pickups increasing during rushour in the morning (8:30am (500mins)) and peaking in the evening. 
 
 ## Question 1a
 
@@ -58,6 +71,8 @@ ggplot(taxi.predict, aes(x = TimeMin, y=PickupCount)) +
   xlab("TimeMin")
 ```
 
+The 5th degree polynomial fits the general trend of the data but misses the morning spike at 500 minutes. The 25th degree polynomial has a very high degree of curvature and appears to overfit to the data. 
+
 #### Analyse the R2 of the models 
 
 ```{r}
@@ -70,7 +85,15 @@ accuracy <- rbind(accuracy, data.frame('model' = '10th degree poly', 'train_rsqu
 accuracy <- rbind(accuracy, data.frame('model' = '25th degree poly', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(poly_25, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(poly_25, newdata=taxi_test))))
 ```
 
+```{r}
+accuracy
+```
+
+The 25th degree polynomimal has the highest degree of freedom and can model all the nuances of the training data. It has the highest training and testing R^2 so does not appear to suffer from overfitting issues (this may also be due to the fact that the testing and training data are very similar in appearance)
+
 ### Regression models: cubic b splines
+
+The knots are set to be at the 40th, 50th and 70th quantile of the data. 
 
 ```{r}
 library(splines)
@@ -92,7 +115,11 @@ ggplot(taxi.predict, aes(x = TimeMin, y=PickupCount)) +
 accuracy
 ```
 
+The cubic B spline has comparable performance to a 10th degree polynomial but has lower R^2 compared to the 25th degree polynomial. 
+
 ### Regression models: natural cubic splines
+
+Perform 5 fold cross validation to select the number of degrees of freedom 
 
 ```{r}
 ## degrees of freedon
@@ -144,12 +171,16 @@ ggplot(perform.5fold, aes(x = df, y = rsquare, color = data)) +
   geom_point()
 ```
 
+The highest R^2 value on the testing set is obtained with 5 degrees of freedom and this was chosen as the optimal value to be used in the natural spline
+
+
 ```{r}
-nspline <- lm(PickupCount ~ ns(TimeMin, df = 6), data = taxi_train)
-accuracy <- rbind(accuracy, data.frame('model' = 'Natural Cubic spline with 6 degree of freedom', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(nspline, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(nspline, newdata=taxi_test))))
+nspline <- lm(PickupCount ~ ns(TimeMin, df = 5), data = taxi_train)
+accuracy <- rbind(accuracy, data.frame('model' = 'Natural Cubic spline with 5 degree of freedom', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(nspline, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(nspline, newdata=taxi_test))))
 accuracy
 ```
 
+The natural spline has superior performance to the cubic spline, due to the higher degrees of freedom. 
 
 ### Smoothing Splines
 
@@ -176,10 +207,14 @@ accuracy <- rbind(accuracy, data.frame('model' = 'Smoothing spline', 'train_rsqu
 accuracy
 ```
 
+The smoothing spline appears has the highest testing and training R2 compared to the other spline models and is comparable to a 25th degree polynomial. 
 
 ### Locally Weighted regression model
 
+Perform 5 fold cross validation to select the optimal span. 
+
 ```{r}
+library(ggplot2)
 loess_5foldcv = function(data_set){
   data_set$splits <- cut(sample(1:nrow(data_set), 
                             nrow(data_set)), 
@@ -216,7 +251,7 @@ perform.5fold <- do.call(rbind, perform.5fold)
 perform.5fold <- aggregate(perform.5fold$r2, perform.5fold[c("span", "set")], FUN = mean)
 
 ## plot the results
-ggplot(perform.5fold, aes(x = span, y = x)) +
+ggplot(perform.5fold, aes(x = span, y = x, color=set)) +
   geom_point() +
   geom_line() +
   ylab(expression(R^2))
@@ -227,13 +262,19 @@ ggplot(perform.5fold, aes(x = span, y = x)) +
 loess_5foldcv(taxi_train)
 ```
 
-A span of 0.1 has the highest R^2 value. 
+A span of 0.2 has the highest R^2 value on the testing set and this can be chosen as the optimal span. 
 
 ```{r}
-loess_model <- loess(PickupCount ~ TimeMin, span = 0.1, data = taxi_train)
+loess_model <- loess(PickupCount ~ TimeMin, span = 0.2, data = taxi_train)
 accuracy <- rbind(accuracy, data.frame('model' = 'Locally weighted regression model', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(loess_model, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(loess_model, newdata=taxi_test$TimeMin))))
 accuracy
 ```
+
+The locally weighted regression model has very similar R^2 to the 25th degree polynomial on both the testing and training sets. 
+Overall, all the models have similar performance on the testing and training sets and no model significantly outperforms any other model. This suggests that for this particular data set the choice of model does not significantly affect the predictive accuracy. 
+
+However, splines generally produce more stable estimates compared to polynomial regression as splines increase flexibility by introducing knots and keeping the degree fixed. Extra flexibility of polynomials produces undesirable results at the boundaries while the natural cubic spline can still provide a reasonable fit to the data. Therefore a spline would be preferrable to a very high degree polynomial. 
+
 
 ### Part 1b: Adapting to Weekends
 
@@ -248,7 +289,7 @@ for (day in 1:7){
 }
 ```
 
-The time series of weekday vs weekend is also shown below:
+The dataset can be split into weekday and weekend pickups and the time series of weekday vs weekend is also shown below:
 
 ```{r}
 weekday_train_df = taxi_train[taxi_train$DayOfWeek != 6 & taxi_train$DayOfWeek != 7 , ]
@@ -266,23 +307,13 @@ ggplot(weekend_train_df, aes(x = TimeMin, y = PickupCount)) +
     ggtitle('Weekend pickups', day) + ylim(0, 100)
 ```
 
-The pattern of pickups is different on the weekends compared to the weekdays
+The pattern of pickups is different on the weekends compared to the weekdays, with a much more pronounced peak during the morning (500 min) on weekdays compared to the weekend and much higher pickup count in the evenings on weekends compared to weekdays. 
 
-#### Fit locally weighted least squares to each subset
-
-Weekday model
+#### Fit locally weighted least squares to each subset with the span set to 0.2
 
 ```{r}
-loess_5foldcv(weekday_train_df)
-```
-
-```{r}
-loess_5foldcv(weekend_train_df)
-```
-
-```{r}
-weekend_model = loess(PickupCount ~ TimeMin, span = 0.1, data = weekend_train_df)
-weekday_model = loess(PickupCount ~ TimeMin, span = 0.1, data = weekday_train_df)
+weekend_model = loess(PickupCount ~ TimeMin, span = 0.2, data = weekend_train_df)
+weekday_model = loess(PickupCount ~ TimeMin, span = 0.2, data = weekday_train_df)
 ```
 
 #### Comparison of R2 values of the new models on the separated test sets compared to model fit on the entire test set
@@ -304,13 +335,15 @@ loess_accuracy <- rbind(loess_accuracy, data.frame('model'='Loess model on weekd
 loess_accuracy
 ```
 
+Predictions for weekdays and weekend made using the locally weighted regression model fit to the entire dataset has very low R2 on the weekday test set, but much higher accuracy on the weekend test set. In comparison, the weekday model fit only on the weekday training set has a higher R^2 (0.358), but this is still lower than the R^2 of the loess model predicting on the entire data set (0.427). The weekend model however has a much higher R^2 for predictions on the weekend test set (0.699) than the full loess model predicting on the weekend test set (0.534).
+
+This suggests that the data for weekends is similar between testing and training data and hence a more specific model can have higher test accuracy. However the same does not apply for weekdays where the R^2 predictions made using a more specific model are lower than the loess model fit to the entire data set.  
+
 ### Problem 2: Predicting Crime in the City
 
 ```{r}
 crime_train <- read.table('dataset_2_train.txt', sep = '\t', header =TRUE)
 crime_test <- read.table('dataset_2_test.txt', sep = '\t', header =TRUE)
-crime_train
-crime_test
 ```
 ```{r}
 library(ggplot2)
@@ -325,13 +358,12 @@ for (pred in names(crime_train)){
 
 Examining the relationship between the crime rate and the individual predictors it is clear that the predictors all have different effects on the response variable. In particular the PercentageUrban has a highly non linear effect. Most communities are either completely urban or completely rural and there are few communities in the spectrum between the extremes. There is also a wide distribution of violent crimes in each of these groups of communities. 
 
-It is clear that a non linear regression model is required. 
+A non linear regression model is required is likely to be preferrable to model this data.  
 
 ### Polynomial Regression 
 
 ```{r}
 library(splines)
-
 
 lin_model <- lm(ViolentCrimesPerPop ~ ., data = crime_train)
 
@@ -354,9 +386,13 @@ crime_accuracy['models'] = c("lin_model", "poly_2", "poly_3", "bspline")
 crime_accuracy
 ```
 
-The bspline and 3rd degree polynomial models have the best performance on the testing set due to their ability to model the highly non linear effects of the predictors on the outcome variable. 
+The bspline and 3rd degree polynomial models have the best performance on the testing set due to their ability to model the highly non linear effects of the predictors on the outcome variable. However there are no significant differences in performance between the models.  
 
 ### Part 2b: GAM models
+
+A GAM model has the advantage of providing a regularized and interpretable solution for data that contains highly nonlinear effects.
+
+All the predictors can be used in the model each fit with a smoothing spline basis function. The smoothing parameter for these splines can be chosen by cross validation on the training set:
 
 ```{r}
 library(gam)
@@ -365,7 +401,7 @@ loess_gam = function(data_set){
                             nrow(data_set)), 
                      breaks = 5, 
                      labels = FALSE)
-  spans <- seq(0.1, 0.8, by = 0.1)
+  spans <- seq(0, 0.8, by = 0.05)
 
 ## iterate over the splits, holding each one out as the test set.
 perform.5fold <- list()
@@ -396,7 +432,7 @@ perform.5fold <- do.call(rbind, perform.5fold)
 perform.5fold <- aggregate(perform.5fold$r2, perform.5fold[c("span", "set")], FUN = mean)
 
 ## plot the results
-ggplot(perform.5fold, aes(x = span, y = x)) +
+ggplot(perform.5fold, aes(x = span, y = x, color=set)) +
   geom_point() +
   geom_line() +
   ylab(expression(R^2))
@@ -405,10 +441,46 @@ ggplot(perform.5fold, aes(x = span, y = x)) +
 
 
 ```{r}
-loess_gam(crime_train)
+  train = crime_train
+  param_val  <- seq(0, 0.8, by = 0.05)
+  k = 5
+  
+  # Input:
+  #   Training data frame: 'train',
+  # Output:
+  #   Vector of R^2 values for the provided parameters: 'cv_rsq'
+  
+num_param = length(param_val) # Number of parameters set.seed(109) # Set seed for random number generator
+
+# Divide training set into k folds by sampling uniformly at random # folds[s] has the fold index for train instance 's'
+folds = sample(1:k, nrow(train), replace = TRUE)
+
+cv_rsq = rep(0., num_param) # Store cross-validated R^2 for different parameter values
+
+# Iterate over parameter values
+for(i in 1:num_param){
+  
+  # Iterate over folds to compute R^2 for parameter 
+  for(j in 1:k){
+      # Fit model on all folds other than 'j' with parameter value param_val[i]
+  #model.loess = loess(PickupCount ~ TimeMin, span = param_val[i], data = train[folds!=j, ],
+        model_1 <- gam(ViolentCrimesPerPop ~ s(Population, spar = param_val[i]) + s(PercentageBlack, spar = param_val[i]) + s(PercentageWhite, spar = param_val[i]) + s(PercentageAsian, spar = param_val[i]) + s(PercentageHispanic, spar = param_val[i]) + s(PercentageUrban, spar = param_val[i]) + s(MedIncome, spar = param_val[i]), data = train[folds!=j, ])        
+
+# Make prediction on fold 'j'
+pred = predict(model_1, train[folds == j, ])
+
+      # Compute R^2 for predicted values
+cv_rsq[i] = cv_rsq[i] + rsq(train[folds == j, ]$ViolentCrimesPerPop, pred)
+}
+  # Average R^2 across k folds
+  cv_rsq[i] = cv_rsq[i] / k
+}
+```
+```{r}
+plot(param_val, cv_rsq)
 ```
 
-Select a spar of 0.8 and fit the GAM to the model 
+Based on cross validation an optimum spar of 0.8 can be selected as this results in the highest testing R2. This value of span can be used to fit the GAM. 
 
 ```{r}
 
@@ -429,18 +501,102 @@ plot(gam_model, se=TRUE)
 gam_model$coefficients
 ```
 
+For most of the predictors, the error curves diverge as the predictor value increases, however for PercentageWhite and PercentageUrban this is not the case. The smallest error bars are seen for the PercentageBlack and PercentageHispanic predictors. Considering the coefficients, the PercentageBlack predictor has the highest predictive power followed by PercentageHispanic and Population. This is in accordance with the error associated with each coefficient. 
 
-The GAM model has a higher R2 than all the 
-
-
-## Likelihood ratio to compare GAM with linear regression model 
+### Likelihood ratio to compare GAM with linear regression model 
 
 ```{r}
 print(anova(lin_model,gam_model,test='Chi'))
 ```
 
+Considering the likelihood of the linear model to the GAM model, it can be seen that the GAM model is better than the linear model with a significance of 0.001. 
+
 ```{r}
-gam_model_refined = gam(ViolentCrimesPerPop ~ s(Population, spar = 0.8) + s(PercentageBlack, spar = 0.8) + s(PercentageWhite, spar = 0.8) + s(PercentageHispanic, spar = 0.8) + s(MedIncome, spar = 0.8), data = crime_train)
+gam_model_refined = gam(ViolentCrimesPerPop ~ s(Population, spar = 0.8) + s(PercentageBlack, spar =  0.8) + s(PercentageWhite, spar =  0.8) + s(PercentageHispanic, spar =  0.8) + s(MedIncome, spar =  0.8), data = crime_train)
 print(anova(gam_model_refined,gam_model,test='Chi'))
 ```
 
+Considering the likelihood of the refined GAM to the original GAM model, the more complex model is seen to be more significant.  It can be seen that the original GAM model is better than the refined GAM model with a significance of 0.001. 
+
+### Part 2c: Including Interaction Terms:
+
+Term 1: Local regression basis function invovling population, percentage urban and medincome
+
+```{r}
+# Function for k-fold cross-validation to tune span parameter in GAM
+  train = crime_train
+  param_val  <- seq(0.1, 0.8, by = 0.1)
+  k = 5
+  
+  # Input:
+  #   Training data frame: 'train',
+  # Output:
+  #   Vector of R^2 values for the provided parameters: 'cv_rsq'
+  
+num_param = length(param_val) # Number of parameters set.seed(109) # Set seed for random number generator
+
+# Divide training set into k folds by sampling uniformly at random # folds[s] has the fold index for train instance 's'
+folds = sample(1:k, nrow(train), replace = TRUE)
+
+cv_rsq = rep(0., num_param) # Store cross-validated R^2 for different parameter values
+
+# Iterate over parameter values
+for(i in 1:num_param){
+  
+  # Iterate over folds to compute R^2 for parameter 
+  for(j in 1:k){
+      # Fit model on all folds other than 'j' with parameter value param_val[i]
+  #model.loess = loess(PickupCount ~ TimeMin, span = param_val[i], data = train[folds!=j, ],
+            
+    
+  model <- gam(ViolentCrimesPerPop ~ s(Population, spar = 0.8) + s(PercentageBlack, spar = 0.8) + s(PercentageWhite, spar = 0.8) + s(PercentageAsian, spar = 0.8) + s(PercentageHispanic, spar = 0.8) + s(PercentageUrban, spar = 0.8) + s(MedIncome, spar = 0.8) + lo(Population, PercentageUrban, MedIncome, span=param_val[i]) + lo(MedIncome, PercentageBlack, span=param_val[i]), data = train[folds!=j, ])
+
+
+# Make prediction on fold 'j'
+pred = predict(model, train[folds == j, ])
+
+      # Compute R^2 for predicted values
+cv_rsq[i] = cv_rsq[i] + rsq(train[folds == j, ]$ViolentCrimesPerPop, pred)
+}
+  # Average R^2 across k folds
+  cv_rsq[i] = cv_rsq[i] / k
+}
+  # Return cross-validated R^2 values
+```
+
+### Interaction Terms in the GAM model 
+
+Use cross validation to tune the span parameter of the local regression interaction term 
+```{r}
+plot(param_val, cv_rsq)
+```
+
+A span of 0.4 has the highest testing R2 from cross validation and this span value was used to train the final GAM model with interaction terms. 
+
+```{r}
+gam_model_refined_tuned = gam(ViolentCrimesPerPop ~ s(Population, spar = 0.8) + s(PercentageBlack, spar = 0.8) + s(PercentageWhite, spar = 0.8) + s(PercentageHispanic, spar = 0.8) + s(MedIncome, spar = 0.8) + lo(Population, PercentageUrban, MedIncome, span=0.4) + lo(MedIncome, PercentageBlack, span=0.4), data = crime_train)
+```
+
+```{r}
+print(anova(gam_model_refined_tuned, gam_model,test='Chi'))
+```
+
+The more complex model (in this case the GAM model with interaction) is more significant than the simpler model (without interaction terms) with a significance of 0.001. 
+
+### Compare GAM models:
+
+The testing R2 of the the original GAM model and the refined GAM model can be compared:
+
+```{r}
+cat('Original GAM model',  rsq(crime_test$ViolentCrimesPerPop, predict(gam_model, newdata=crime_test)))
+```
+
+```{r}
+cat('GAM model without PercentageUrban and Percentage Asian terms',  rsq(crime_test$ViolentCrimesPerPop, predict(gam_model_refined, newdata=crime_test)))
+```
+
+```{r}
+cat('GAM model without PercentageUrban and Percentage Asian terms and with interaction terms', rsq(crime_test$ViolentCrimesPerPop, predict(gam_model_refined_tuned, newdata=crime_test)))
+```
+
+The final GAM model with the incusion of the interaction terms has a higher testing R2 compared to the previous two GAM models. However there is no significant improvement in the predictive accuracy (increase of only 0.02 in the testing R2). Compared to the linear and polynomial models, the GAM model has not had a significant improvement in the predictive accuracy on the test set. This suggests that a more complex model may not be justified for modeling the incidence of violent crimes in this data set. 
