@@ -262,10 +262,10 @@ ggplot(perform.5fold, aes(x = span, y = x, color=set)) +
 loess_5foldcv(taxi_train)
 ```
 
-A span of 0.2 has the highest R^2 value on the testing set and this can be chosen as the optimal span. 
+A span of 0.4 has the highest R^2 value on the testing set and this can be chosen as the optimal span. 
 
 ```{r}
-loess_model <- loess(PickupCount ~ TimeMin, span = 0.2, data = taxi_train)
+loess_model <- loess(PickupCount ~ TimeMin, span = 0.4, data = taxi_train)
 accuracy <- rbind(accuracy, data.frame('model' = 'Locally weighted regression model', 'train_rsquared'=rsq(taxi_train$PickupCount, predict(loess_model, newdata=taxi_train)), 'test_rsquared'=rsq(taxi_test$PickupCount, predict(loess_model, newdata=taxi_test$TimeMin))))
 accuracy
 ```
@@ -396,51 +396,6 @@ All the predictors can be used in the model each fit with a smoothing spline bas
 
 ```{r}
 library(gam)
-loess_gam = function(data_set){
-  data_set$splits <- cut(sample(1:nrow(data_set), 
-                            nrow(data_set)), 
-                     breaks = 5, 
-                     labels = FALSE)
-  spans <- seq(0, 0.8, by = 0.05)
-
-## iterate over the splits, holding each one out as the test set.
-perform.5fold <- list()
-for(split in data_set$splits) {
-  train <- data_set$split == split
-  mt.train <- data_set[train, ]
-  mt.test <- data_set[-train, ]
-  
-  train.r2 <- c()
-  test.r2 <- c()
-  
-  for(sp in spans) {
-      mod <- gam(ViolentCrimesPerPop ~ s(Population, spar = sp) + s(PercentageBlack, spar = sp) + s(PercentageWhite, spar = sp) + s(PercentageAsian, spar = sp) + s(PercentageHispanic, spar = sp) + s(PercentageUrban, spar = sp) + s(MedIncome, spar = sp), data = mt.train)
-    train.r2 <- c(train.r2, rsq(mt.train$ViolentCrimesPerPop, predict(mod, newdata=mt.train)))
-    test.r2 <- c(test.r2, rsq(mt.test$ViolentCrimesPerPop, predict(mod, newdata=mt.test)))
-  }
-  
-  loess.r2 <- data.frame(span = c(spans, spans),
-                       set = rep(c("train", "test"), each = length(spans)),
-                       r2 = c(train.r2, test.r2))
-  perform.5fold <- c(perform.5fold, list(loess.r2))
-}
-
-## collect the k sets of model statistics in a data.frame
-perform.5fold <- do.call(rbind, perform.5fold)
-
-## aggregate across the k sets, averaging model statistics for each df
-perform.5fold <- aggregate(perform.5fold$r2, perform.5fold[c("span", "set")], FUN = mean)
-
-## plot the results
-ggplot(perform.5fold, aes(x = span, y = x, color=set)) +
-  geom_point() +
-  geom_line() +
-  ylab(expression(R^2))
-}
-```
-
-
-```{r}
   train = crime_train
   param_val  <- seq(0, 0.8, by = 0.05)
   k = 5
@@ -475,8 +430,6 @@ cv_rsq[i] = cv_rsq[i] + rsq(train[folds == j, ]$ViolentCrimesPerPop, pred)
   # Average R^2 across k folds
   cv_rsq[i] = cv_rsq[i] / k
 }
-```
-```{r}
 plot(param_val, cv_rsq)
 ```
 

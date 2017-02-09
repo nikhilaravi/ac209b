@@ -205,6 +205,7 @@ Our plot could use a regression line:
 hp2001Q1$pred.SC <- predict(lm(Structure.Cost ~ log.Land.Value,
                                data = hp2001Q1))
 
+## second geo object geom_point inherits x and y. 
 ggplot(hp2001Q1, mapping = aes(x = log.Land.Value, y = Structure.Cost)) + geom_point(mapping = aes(color = Home.Value)) +
     geom_line(mapping = aes(y = pred.SC))
 ```
@@ -254,7 +255,7 @@ adjust the labels for us. Other `ggplot` helper packages are described
 at <http://www.ggplot2-exts.org/>.
 
 ```{r}
-## install.packages("ggrepel")
+#install.packages("ggrepel")
 library("ggrepel")
 p1 +
     geom_point() + geom_text_repel(mapping = aes(label=State), size = 3)
@@ -266,6 +267,8 @@ Aesthetic Mapping VS Assignment
 Note that variables are mapped to aesthetics with the `aes()`
 function, while fixed aesthetics are set outside the `aes()` call.
 This sometimes leads to confusion, as in this example:
+
+use aesthetic mapping to map a variable to an aesthetic 
 
 ```{r}
 p1 + geom_point(mapping = aes(size = 2),# incorrect! 2 is not a variable
@@ -326,8 +329,10 @@ housing.sum <- aggregate(housing["Home.Value"],  housing["State"], FUN=mean)
 rbind(head(housing.sum),
       tail(housing.sum))
 
+
+## for geom bar - tries to bin and then plot the counts - 
 ggplot(housing.sum, mapping = aes(x=State, y=Home.Value)) +
-    geom_bar() 
+    geom_bar(stat="identity") 
 ```
 
 What is the problem with the previous plot? Basically we take binned
