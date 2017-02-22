@@ -1,0 +1,72 @@
+---
+title: "hwk2_report"
+author: "Nikhila Ravi"
+date: "9 February 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exploratory Data Analysis
+
+
+```{r, echo = FALSE, eval=FALSE, fig.height = 7, fig.width = 9}
+## Reshaping Data in R
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Merge Count data and convert to tall format
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+library(tidyr)
+
+dat = read.csv('./CS109b-hw2_q2_datasets/global-malaria-2000-2013.csv')
+dat2015 = read.csv('./CS109b-hw2_q2_datasets/global-malaria-2015.csv')
+
+dat2 = merge(dat, dat2015, by = 'Code')
+
+data_long <- gather(dat2, year, Estimated_Malaria_Counts, Y_2000,Y_2005,Y_2010,Y_2013,Suspected_malaria_cases, factor_key=TRUE)
+
+
+levels(data_long$year) <- c('2000', '2005', '2010', '2013', '2015')
+
+write.csv(data_long[,c('Code', 'Country.x', 'WHO_region', 'year', 'Estimated_Malaria_Counts')], file = './CS109b-hw2_q2_datasets/global-malaria-byYear.csv')
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Convert funding data to tall format
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+
+funding = read.csv('./CS109b-hw2_q2_datasets/global-funding.csv')
+funding_long = gather(funding, year, Amount, X2005:X2013, factor_key=TRUE)
+
+
+levels(funding_long$year) <- c('2005', '2006', '2007', '2008', '2009', '2010', '2011', '2012', '2013')
+write.csv(funding_long, file = './CS109b-hw2_q2_datasets/global-funding-byYear.csv')
+
+```
+
+
+```{r}
+malaria_funding <- read.csv('./CS109b-hw2_q2_datasets/global-funding-byYear.csv')
+malaria_counts <- read.csv('./CS109b-hw2_q2_datasets/globalmalariabyYear.csv')
+```
+
+```{r}
+malaria_funding <- read.csv('./CS109b-hw2_q2_datasets/global-funding-byYear.csv')
+malaria_counts <- read.csv('./CS109b-hw2_q2_datasets/globalmalariabyYear.csv')
+```
+
+```{r}
+library(ggplot2)
+counts_1 <- ggplot(malaria_funding,
+       mapping = aes(x=year, y=Amount, group = Source))
+counts_1 + geom_line(mapping = aes(color = Source))  
+```
+
+```{r}
+library(ggplot2)
+counts_1 <- ggplot(malaria_funding,
+       mapping = aes(x=year, y=Amount, group = Source))
+counts_1 + geom_line(mapping = aes(color = Source))  
+```
