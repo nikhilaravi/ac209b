@@ -202,6 +202,23 @@ where $y_i$ is the binary author identity in the test set for article $i$ and $p
 
 ```{r eval=FALSE}
 #  -----------------  Cross validation   ----------------  #
+class_probability_train_test = function(train, test, class, alpha) {
+    y <- lapply(split(train, class),
+                function(x) {
+                    apply(x, 2, sum)
+                })
+    yA <- y[[1]]
+    yB <- y[[2]]
+    pA <- apply(test, 1, function(x) {
+        posterior_pA(alpha = alpha,
+                     yA = yA,
+                     yB= yB,
+                     y_til = x)
+    })
+    pA
+}
+
+
 MultiLogLoss <- function(act, pred){
   eps <- 1e-15
   pred <- pmin(pmax(pred, eps), 1 - eps)
@@ -214,7 +231,7 @@ alphas <- seq(0.1, 2, by = 0.1)
 ac <- c()
 
 # Function for k-fold cross-validation to tune span parameter in loess
-crossval = function(train, param_val, k) {
+crossval = function(train, param_val, k=3) {
   # Input: 
   #   Training data frame: 'train', 
   #   Vector of span parameter values: 'param_val', 
@@ -235,10 +252,14 @@ crossval = function(train, param_val, k) {
   for(i in 1:num_param){
     # Iterate over folds to compute R^2 for parameter
     for(j in 1:k){
+      
+      subset_train = train[folds == j, ]
+      subset_test = train[folds != j, ]
+      
       # Fit model on all folds other than 'j' with parameter value param_val[i]
-      actual_train <- sapply(train$V1, as.numeric)# asnumeric changes factors to 1, 2, 3 etc but we want 1 or 0
+      actual_train <- sapply(subset_train$V1, as.numeric)# asnumeric changes factors to 1, 2, 3 etc but we want 1 or 0
       actual_train <- replace(actual_train, actual_train==2, 0) # changes factors from 2 to 0
-      pA_train = class_probability_train_test(train[-1], train[1], alpha=param_val[i])
+      pA_train = class_probability_train_test(subset_train[-1], subset_test[-1], subset_train[1], alpha=param_val[i])
 
       # Compute R^2 for predicted values
       log_loss[i] = MultiLogLoss(actual_train, pA_train)
@@ -254,7 +275,7 @@ crossval = function(train, param_val, k) {
 ```
 
 ```{r}
-log_losses = crossval(author_train, alphas, 5)
+log_losses = crossval(author_train, alphas, 3)
 plot(alphas, log_losses)
 ```
 
@@ -336,7 +357,7 @@ Consider the situation in Part 1b, using the Monte-Carlo approximation in `appro
 ```{r}
 # Function to calculate class probabilitues using MC
 
-class_probability_train_test = function(train, test, class, alpha, nsims) {
+class_probability_train_test_mc = function(train, test, class, alpha, nsims) {
     y <- lapply(split(train, class),
                 function(x) {
                     apply(x, 2, sum)
@@ -363,7 +384,7 @@ accuracy_mc <- c()
 ## iterate using a for-loop
 for(n in nsims) {
   
-  pa1 <- class_probability_train_test(author_train[-1],
+  pa1 <- class_probability_train_test_mc(author_train[-1],
                          author_test[-1],
                          author_train[[1]],
                          alpha = best_alpha, nsims=n) 
