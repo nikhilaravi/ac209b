@@ -1,0 +1,44 @@
+---
+title: 'CS 109B, Spring 2017, Homework 2 Question 2'
+output: pdf_document
+---
+
+
+
+## What is malaria and why do we care?
+
+Malaria is a life-threatening disease caused by parasites that are transmitted to people through the bites of infected female mosquitoes, called malaria vectors. Malaria is generally considered a tropical disease, since the breeds of mosquitoes that are potent malaria vectors develop best in tropical climates. As such, many victims are in the tropics, especially in Africa and, to a lesser extent, South East Asia. According to World Health Organization (WHO), about 3.2 billion people – almost half of the world’s population – are at risk of malaria, with 214 million malaria cases reported worldwide in 2015. The following graph shows the number of suspected malaria cases as a percentage of population, grouped by WHO region.
+
+![Suspected Malaria Cases By Region](q2_datasets/suspected-malaria-by-region.png)
+
+Even though most malaria victims are in the tropics, young children, pregnant women and non-immune travelers from malaria-free areas are particularly
+vulnerable to the disease when they become infected.
+
+## Malaria is preventable and curable
+
+Malaria is preventable and curable, and increased efforts are dramatically reducing the malaria burden in many places. Between 2000 and 2015, malaria incidence has decreased by 37% and mortality rate has dropped by 60%.
+
+
+Preventation is especially inexpensive. According to Against Malaria Foundation, the most effective means of preventing malaria is sleeping under a mosquito net. Each net costs only 2.50 dollars, lasts for 3-4 years, and protects two people. Malaria can be cured with prescription drugs, and are especially effective early before it becomes life-threatening. Self-treatment is strongly discouraged.
+
+
+Unfortunately, since malaria has virtually been eliminated from the developed world with temperate climates, and most victims are in poor African countries with limited resources, malaria gets less research attention and resources for preventation, treatment, and cure that it deserves, especially considering that we know how to prevent and cure malaria very well at low costs. 
+
+Bill Gates, the entrepreneur-turned-philanthropist and head of The Gates Foundation which is a major donor to malaria-related causes, highlighted this underinvestment problem at the Global Grand Challenges Summit. "The malaria vaccine in humanist terms is the biggest need. But it gets virtually no funding," he said, "but if you are working on male baldness or other things you get an order of magnitude more research funding because of the voice in the marketplace than something like malaria." Since the malaria victims are mostly poor people that do not have the same purchasing power that the victims of many other diseases have, malaria depends more than ever on charitable efforts and donations from you.
+
+The following graph shows global funding for malaria-related causes from different sources.
+
+![Global Malaria Funding](q2_datasets/global-funding-byYear.png)
+
+From the graph, you can see that the global funding for malaria has increased in the last decade, which is good news. However, most of the increase in funding comes from global funds, and apart from the main sources (global funds, domestic resources and United States), the contribution of other sources are very small.
+
+
+
+
+
+
+
+
+ 
+
+

@@ -1,0 +1,259 @@
+---
+title: 'CS 109B, Spring 2017, Homework 2: Generalized Additive Models'
+output: pdf_document
+---
+
+```{r child='CS109b-hw2-question1.rmd'}
+
+```
+
+
+## Solution:
+
+```{r message=FALSE}
+#load libraries
+library(ggplot2)
+library(gridExtra)
+library(productplots)
+library(gam)
+```
+
+##### Load train and test datasets
+```{r results='hold'}
+# load train set
+train = read.csv("datasets/dataset_1_train.txt", header=TRUE)
+cat("Train data size:", dim(train), "\n")
+head(train)
+
+# load test set
+test = read.csv("datasets/dataset_1_test.txt", header=TRUE)
+cat("\nTest data size:", dim(test), "\n")
+head(test)
+cat("\n")
+
+#Dataset structure
+str(train)
+```
+  
+##   
+  
+```{r}
+library(boot)
+
+# Function to compute k-fold cross-validation accuracy for a given classification model
+cv_accuracy = function(model, data, k) {
+  # Input: 
+  #   'model' - a fitted classification model
+  #   'data' - data frame with training data set used to fit the model
+  #   'k' - number of folds for CV
+  # Output:
+  #   'cv_accuracy' - cross-validation accuracy for the model
+  
+  acc <- 1 - cv.glm(data, model, K = k)$delta[1]
+  return(acc)
+}
+
+
+classification_accuracy = function(true_val,predicted) {
+  # Input: 
+  #   'true_val' - Actual value (truth)
+  #   'predicted' - Predicted probabilites by model 
+  # Output:
+  #   classfication accuracy
+  y = true_val=='Yes'
+  y_ = (predicted>0.5)
+  return (mean(y == y_))
+}
+
+```
+
+```{r}
+table(train$HeartDisease) #Check how many patients with or without HeartDisease
+```
+
+<br></br>
+
+#### By visual inspection, do you find that the predictors are good indicators of heart disease in a patient?
+```{r  fig.width = 6, fig.height = 6}
+
+p1 = prodplot(train, ~ HeartDisease + Sex, c("vspine", "hbar")) + ggtitle("")
+#Observation: HeartDisease is highest when sex = 1 as compared to sex=0
+
+p2 = prodplot(train, ~ HeartDisease + ChestPain, c("vspine", "hbar")) +
+      theme(axis.text.x = element_text(angle = 25, hjust = 1),
+            axis.title=element_text(size=10))
+#Observation: HeartDisease is highest, when ChestPain = asymptomatic
+ 
+p3 = prodplot(train, ~ HeartDisease + Thal, c("vspine", "hbar")) + ggtitle("") +
+      theme(plot.title = element_text(hjust = 0.5))
+#Observation: HeartDisease is not common when Thal=normal
+
+p4 = prodplot(train, ~ HeartDisease + ExAng, c("vspine", "hbar")) + ggtitle("") +
+      theme(plot.title = element_text(hjust = 0.5))
+#Observation: Patients with ExAng=1, HeartDisease is higher.
+
+p5 = ggplot(train, aes(x = HeartDisease, y = Age)) +
+        geom_boxplot() + coord_flip()
+#Observation: The median age is higher for patients with HeartDisease
+
+p6 = ggplot(train, aes(x = HeartDisease, y = RestBP)) +
+        geom_boxplot() + coord_flip()
+#Observation: RestBP is slightly higher for patients with HeartDisease.  
+
+grid.arrange(p1,p2,p3,p4,p5,p6,nrow=3,ncol=2)
+```
+
+*Observation:* Starting from top-left:  
+(1) HeartDisease vs Sex - HeartDisease is highest when sex = 1 as compared to sex=0.  
+(2) HeartDisease vs ChestPain - HeartDisease is highest, when ChestPain = asymptomatic.  
+(3) HeartDisease vs Thal - HeartDisease is not common when Thal=normal.   
+(4) HeartDisease vs ExAng - HeartDisease is higher for Patients with ExAng=1.  
+(5) HeartDisease vs Age - The median age is higher for patients with HeartDisease.    
+(6) HeartDisease vs RestBP - RestBP is also slightly higher for patients with HeartDisease.  
+   
+Overall, the predictors seem to be good indicators of predicting heart disease in patients.
+
+#### Apply the generalized additive model (GAM) method to fit a binary classification model to the training set and report its classification accuracy on the test set. You may use a smoothing spline basis function wherever relevant, with the smoothing parameter tuned using cross-validation on the training set. Would you be able to apply the smoothing spline basis to categorical predictors? Is there a difference in the way you would handle categorical attributes in `R` compared to `sklearn` in `Python`?  
+
+
+**Function to create GAM model**
+```{r}
+fit_gam_s = function(train, test, spar_val, disp) {
+  # Input: 
+  #   Training dataframe: 'train', 
+  #   Test dataframe: 'test', 
+  #   Tuning parameter spar: 'spar_val'  
+  #   Boolean value to decide what will be return value: 'disp'
+  # Output: 
+  #   if 'disp' is true function returns GAM model else function returns GAM test accuracy
+
+  gam_formula = as.formula(paste0("HeartDisease ~ s(RestBP,spar = ",spar_val,") + 
+                                  s(Age,spar = ",spar_val,") + ChestPain + factor(Sex) + Thal +
+                                  factor(ExAng)"))
+ 
+  model.gam <- gam(gam_formula, data=train,family=binomial(link = "logit"))
+  
+  preds = predict(model.gam, newdata=test, type="response")
+  gam_testaccuracy = classification_accuracy(test$HeartDisease,preds)
+  
+  preds = predict(model.gam, newdata=train, type="response")
+  gam_trainaccuracy = classification_accuracy(train$HeartDisease,preds)
+  
+  if(disp==TRUE){
+    cat(sprintf("GAM with smoothing spline (spar = %.2f): Train R^2: %.3f, 
+                Test R^2: %.3f\n", spar_val, gam_trainaccuracy, gam_testaccuracy))
+    return(model.gam)
+  }
+  else{
+    return(gam_testaccuracy)
+  }
+}
+
+```
+
+```{r results="hold"}
+#Let's explore few spar values, to check how it affects the classification accuracy
+acc1 = fit_gam_s(train,test,0.25,FALSE)
+acc2 = fit_gam_s(train,test,0.5,FALSE)
+acc3 = fit_gam_s(train,test,0.75,FALSE)
+acc4 = fit_gam_s(train,test,0.95,FALSE)
+
+cat("Classification accuracy, spar = 0.25:", acc1)
+cat("\nClassification accuracy, spar = 0.5:", acc2)
+cat("\nClassification accuracy, spar = 0.75:", acc3)
+cat("\nClassification accuracy, spar = 0.95:", acc4)
+```
+
+
+##### Cross validation for tuning spar parameter 
+```{r}
+
+spars = seq(0.05, 1, 0.05)
+res = rep(NA, length(spars))
+set.seed(109)
+
+for (i in 1:length(spars)) {
+  gam_formula = as.formula(paste0("HeartDisease ~ s(RestBP,spar = ",spars[i],") + 
+                                  s(Age,spar = ",spars[i],") + ChestPain + factor(Sex) + Thal +
+                                  factor(ExAng)"))
+  model.gam <- gam(gam_formula, data=train,family=binomial(link = "logit"))
+  
+  res[i] = cv_accuracy(model.gam,train,5)  #5 fold cross-validation
+}
+
+# Find spar with highest CV accuracy
+best_spar = which(res==max(res))
+title_str = sprintf("5-fold cross-validation: Best spar = %.3f with CV accuracy %.3f",
+                    spars[best_spar], res[best_spar])
+
+# Plot - Classification accuracy as a function of Spar values 
+ggplot() + 
+  geom_line(aes(x=spars,y=res)) + 
+  labs(x="spar" , y = "Accuracy" ,title=title_str ) 
+
+```
+
+*Observation:* Smoothing spline basis cannot be applied to categorical predictors.  
+In `sklearn` in `Python` we have to convert categorical data to numeric to be able to create any models. 
+
+
+#### Plot the smooth of each predictor for the fitted GAM. By visual inspection, do you find any benefit in modeling the numerical predictors using smoothing splines?  
+
+##### Fit GAM model with best spar value and plot 
+```{r results="hold", fig.width = 6, fig.height = 7}
+model.gam = fit_gam_s(train,test,spars[best_spar],TRUE)
+par(mfrow=c(3,2))
+plot(model.gam, se = TRUE)
+par(mfrow=c(1,1))
+```
+*Observation:* Based on the plots we conclude that smoothing splines are beneficial for numerical predictors (RestBP and Age).
+
+#### Using a likelihood ratio test, compare the fitted GAM with the following models: (i) a GAM with only the intercept term; (ii) a GAM with only categorical predictors; and (iii) a GAM with all predictors entered linearly.
+
+#### (i) a GAM with only the intercept term
+```{r}
+#gam with intercept term
+gam_formula = as.formula(paste0("HeartDisease ~ 1"))
+model.gam1 <- gam(gam_formula, data=train,family=binomial(link = "logit"))
+  
+preds = predict(model.gam1, newdata=test, type="response")
+gam_testaccuracy1 = classification_accuracy(test$HeartDisease,preds)
+```
+
+#### (ii) GAM with only categorical predictors 
+```{r}
+gam_formula = as.formula(paste0("HeartDisease ~ Sex + ChestPain + Thal + ExAng"))
+model.gam2 <- gam(gam_formula, data=train,family=binomial(link = "logit"))
+
+preds = predict(model.gam2, newdata=test, type="response")
+gam_testaccuracy2 = classification_accuracy(test$HeartDisease,preds)
+```
+
+
+#### (iii) GAM with all predictors entered linearly.
+```{r results="hold"}
+gam_formula = as.formula(paste0("HeartDisease ~ Sex + ChestPain + Thal + ExAng + Age +
+                                RestBP"))
+model.gam3 <- gam(gam_formula, data=train,family=binomial(link = "logit"))
+
+preds = predict(model.gam3, newdata=test, type="response")
+gam_testaccuracy3 = classification_accuracy(test$HeartDisease,preds)
+
+cat("Summary of models:")
+cat("\nGAM model with intercept only:",gam_testaccuracy1)
+cat("\nGAM model with only categorical predictors:", gam_testaccuracy2)
+cat("\nGAM model with all predictors entered linearly:", gam_testaccuracy3)
+```
+
+##### Likelihood test to compare against previous GAM model
+```{r}
+anova(model.gam1, model.gam, test="Chi") #Comparison with only intercept term
+anova(model.gam2, model.gam, test="Chi") #Comparison with only categorical predictors
+anova(model.gam3, model.gam, test="Chi") #Comparison with all predictors entered linearly
+
+```
+*Observation:* 
+- Model fitted with only intercept is worse at a significance level of 0.001  
+- Model fitted with only categorical attributes is also worse at a significance level of 0.05  
+- The difference in performance between the two models (predictors entered linearly and model.gam) is not statistically significant.
+

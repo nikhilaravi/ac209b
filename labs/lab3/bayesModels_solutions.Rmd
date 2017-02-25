@@ -392,6 +392,7 @@ confmat <- function(actual, predicted) {
         margin = 2)
 }
 
+## here posterior A is the probability of the message being an email and not spam 
 confmat(spam$spam,
         factor(pa1 < .5,
                labels = c("email", "spam")))

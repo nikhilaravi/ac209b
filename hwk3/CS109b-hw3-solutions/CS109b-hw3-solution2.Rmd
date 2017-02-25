@@ -1,0 +1,105 @@
+---
+title: "CS 109B, Spring 2017, Homework 3: Introduction to Bayesian Methods"
+date: "Jan 2016"
+output: pdf_document
+---
+
+# Problem 2: Bayesian Logisitic Regression
+You are provided with data sets `dataset_2_train.txt` and `dataset_2_test.txt` containing details of contraceptive usage by 1934 Bangladeshi women. There are 4 attributes for each woman, along with a label indicating if she uses contraceptives. The attributes include: 
+
+ - `district`: identifying code for the district the woman lives in
+ - `urban`: type of region of residence
+ - `living.children`: number of living children
+ - `age_mean`: age of women (in years, centred around mean)
+
+The women are grouped into 60 districts. The task is to build a classification model that can predict if a given woman uses contraceptives.
+
+Use simple visualizations to check if there are differences in contraceptive usage among women across the districts. If so, would we benefit by fitting a separate classification model for each district? To answer this question, you may fit the following classification models to the training set and compare their accuracy on the test set:
+
+- A separate logistic regression model for each district
+- A single logistic regression model using the entire training set (ignoring the district information)
+
+Fit a Bayesian hierarchical logistic regression model to the training set using the district as a grouping variable, and evaluate its accuracy on the test set. Does the Bayesian hierarchical model yield better accuracies than the two models fitted previously? Give an explanation for what you observe.  Also, explain why the hierarchical logistic regression is a compromise between fitting separate logistic regressions for each district and a single logistic regression ignoring district membership.
+
+*Hint:* You may use the `MCMChlogit` function in the `MCMCpack` package for fitting a Bayesian hierarchical logistic regression model.
+
+
+```{r results='hold' , warning=FALSE}
+suppressMessages(library(MLmetrics))
+suppressMessages(library(e1071))
+suppressMessages(library(MCMCpack))
+suppressMessages(library(MGLM))
+library(ggplot2)
+```
+
+
+```{r}
+train = read.csv('./datasets_preprocessed_code/dataset_2_train.txt', header = TRUE)
+test = read.csv('./datasets_preprocessed_code/dataset_2_test.txt', header = TRUE)
+
+```
+
+```{r fig.height=8}
+ggplot(data=train,aes(x=factor(district),y=contraceptive_use)) + 
+  geom_bar(stat="identity") +
+  coord_flip() + 
+  xlab("district#") + scale_x_discrete(breaks=seq(5,60,5))
+```
+
+
+```{r}
+# a separate logistic regression model for each district  
+options(warn=-1)
+
+district_vector = c(unique(train$district))  
+
+df = data.frame(y_true_val= integer(0), preds= integer(0)) 
+for (i in 1:length(district_vector)) {
+      model = suppressWarnings(glm(contraceptive_use ~ urban + age_mean + living.children ,
+          family = binomial(link="logit"),data=train[train$district==district_vector[i],]))
+      
+      y_true = test[test$district==district_vector[i],'contraceptive_use']
+      preds = suppressWarnings(predict(model, 
+                                       newdata=test[test$district==district_vector[i],],
+                                       type="response")) > 0.5
+      df = rbind(df,do.call(cbind,list(y_true,preds)))
+}
+Accuracy(df$V1,df$V2) #0.6111686
+
+```
+
+
+```{r}
+# a single logistic regression model using the entire training set (ignoring the district information)
+
+glm.model = glm(contraceptive_use ~ urban + age_mean + living.children ,family = binomial(link="logit"),data=train)
+
+pred = predict(glm.model, newdata = test, type="response")
+pred = ifelse(pred>0.5,1,0)
+
+Accuracy(pred,test$contraceptive_use)
+
+table(pred,test$contraceptive_use)
+
+
+```
+
+```{r}
+library(rstanarm)
+
+# solution for the optional Bayesian hierarchical logistic regression model using RStan
+
+m <- stan_glmer(contraceptive_use ~ urban + living.children + age_mean + (1 + urban + living.children + age_mean | district),
+                data = train,
+                family = "binomial")
+
+pd <- apply(posterior_predict(m, newdata = test), 2, mean)
+pred.bin = ifelse(pred>0.5,1,0)
+
+table(test$contraceptive_use,
+        as.integer(pd > .5))
+
+Accuracy(test$contraceptive_use, pred.bin)
+```
+
+Fitting a single logistic regression on the entire data set is too general; there are clear differences in contraceptive use across districts, and grouping all of the districts together throws away this important distinction, resulting in low performance. On the other hand, fitting a separate logistic regression model for each  district and predicting on a case-by-case basis accounts for the variations in contraceptive use explained by variations in district, but suffers from potential underfitting - because each district has a small number of people, the models are imprecise. The hierarchical model is a compromise between the two options because the $\beta_g$ account for inter-group variation, while the random effects distribution prevents underfitting by weighing small groups toward the population mean. 

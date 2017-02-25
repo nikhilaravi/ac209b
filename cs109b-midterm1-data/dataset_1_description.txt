@@ -1,0 +1,37 @@
+Data set 1: Yelp Restaurant Ratings
+
+-------------
+Response variable:
+
+rating: 0-1 indicator for average customer rating is larger than 3.5
+
+-------------
+Description of business attributes:
+
+name: Name of restaurant
+postal_code, city,  state, atitude, longitude: Location of restaurant
+review_count: Number of reviews from customers for the restaurant
+cuisine:  Bars, Italian, Fast Food, Coffee & Tea , Mexican, Pizza, Breakfast & Brunch, Chinese, Sandwiches, Burgers, Bakeries
+WheelchairAccessible: yes or no
+Wifi: no, free, paid
+BusinessAcceptsCreditCards: yes or no
+Alcohol: none, full_bar, beer_and_wine
+NoiseLevel: average, quite, loud, very loud
+RestaurantsPriceRange2: 1, 2, 3, 4  (1-low, 4-high)
+RestaurantsAttire: casual, dressy, formal
+Smoking: no, yes, outdoor
+RestaurantsReservations: yes or no
+OutdoorSeating: yes or no
+GoodForKids: yes or no
+avg_word_cont: Average words per customer review for the restaurant
+
+-------------
+Description of text features:
+
+Each text feature corresponds to a frequently used word in the customer reviews. The feature value for a restaurant contains the number of times the word occurs in customer reviews for the restaurant. For example, a text feature 'fantastic' with entry 18 for a restaurant denotes that the word 'fantastic' was used 18 times in customer reviews for the restaurant.
+
+The text features used are given below:
+
+wine,chocolate,sum,dim,perfect,sweet,chinese,bread,breakfast,happy,loved,selection,manager,spot,corn,dessert,fantastic,sushi,super,bbq,pastries,crust,brunch,taco,perfectly,dish,asked,wonderful,phoenix,rice,waitress,flavors,mesa,bobby,highly,enjoyed,pho,local,flay,worst,fried,chef,croissant,cool,bakery,horrible,bianco,shop,bacon,cream,absolutely,salsa,spicy,hour,yelp,pittsburgh,enjoy,macarons,prices,italian,feel,friends,list,primanti,ingredients,tea,roasted,light,rude,pork,wings,lobster,ribs,places,chips,roll,terrible,pasta,mexican,cake,yummy,appetizer,ambiance,brisket,friend,cooked,seating,cute,outside,different,flavorful,free,unique,told,salmon,options,lux,town,delivery,huge
+
+-------------
