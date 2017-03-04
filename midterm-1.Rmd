@@ -1,11 +1,13 @@
 ---
 title: "CS 109B: Midterm Exam 1"
+author: "Nikhila Ravi"
 subtitle: "Feb 23, 2017"
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning=FALSE, message=FALSE, tidy.opts=list(width.cutoff=60),tidy=TRUE)
 ```
 The set of questions below address the task of predicting the merit of a restaurant on Yelp. Each restaurant is described by a set of business attributes, and is accompanied by a set of text reviews from customers. For the purpose of the problems below, the average rating (originally on a scale from 0 to 5) was converted into a binary variable depending on whether the average was above 3.5, in which case it is considered "good" (labeled 1), or below 3.5 in which case it is considered "bad" (labeled 0). The overall goal is to predict these binary ratings from the information provided.
 
@@ -15,11 +17,10 @@ We use the bag-of-words encoding to generate the text features, where the set of
 
 Load the data:
 
-```{r, warn = FALSE, echo = TRUE, fig.height = 7, fig.width = 9}
+```{r, warn = FALSE, echo = FALSE, fig.height = 7, fig.width = 9}
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
 # Load libraries and data
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
-# suppressMessages(library(caret))
 suppressMessages(library(mclust))
 suppressMessages(library(MLmetrics))
 suppressMessages(library(ggplot2))
@@ -37,20 +38,18 @@ table(restaurants_train$rating) #Check how many good/bad reviews
 
 Does the location of a restaurant relate to its rating?  Construct a compelling visualization to address this question, and write a brief (under 300 words) summary that clearly explains your analysis and conclusions to someone without a data science background.
 
-In order to determine if location is a contributing factor to the rating a number of different visualisations can be used on the training dat. The important predictors to consider are the geo coordinates (latitude and longitude), postal code (which encodes both lat and long) as well as the city and state.
+In order to determine if location is a contributing factor to the rating a number of different visualisations can be used on the training data. The important predictors to consider are the geo coordinates (latitude and longitude), postal code (which encodes both lat and long) as well as the city and state.
 
 Firstly, the restaurants can be plotted on a map color coded by the rating. 
 
-```{r}
+```{r echo = FALSE}
 library('ggmap')
 ggplot(data=restaurants_train, aes(longitude, latitude, color=rating)) + geom_point(alpha = 0.2) 
-map <- get_map(location=c(lon=-100, lat=40), zoom=12, maptype='roadmap', color='bw')
-ggmap(map) + geom_point(data=restaurants_train, aes(longitude, latitude), color='red', size=20)
 ```
 
 From the geoplot, it is clear that the resturants in the training set are located in a few specific regions, however the relationship between location and rating is not immediately apparent. A histogram of the latitude and longitudes as well as the postcodes color coded by the rating can be used to explore the geolocation and rating relationship further. 
 
-```{r}
+```{r echo = FALSE}
 restaurants_train_plot <- restaurants_train
 restaurants_train_plot$rating <- ifelse(restaurants_train_plot$rating == 1, 'good', 'bad')
 ggplot(restaurants_train_plot, aes(latitude, fill = rating)) + geom_density(alpha = 0.2) + ggtitle('Predictor: latitude')
@@ -62,6 +61,20 @@ ggplot(restaurants_train_plot, aes(state, fill = rating)) + geom_bar()+ ggtitle(
 As observed before, the latitude and longitude values are clustered into a few regions. This is also clear from the distribution of postcodes (which encode both the latitude and longitude). On average, there are approximately equal numbers of good and bad reviews in each region. However in two specific latitude regions, either good reviews dominate or bad reviews dominate: restaurants in the latitude range 34.5-37 have higher number of bad ratings compared to restaurants in the latitude range 33-34.5 which have a larger number of good ratings. In the longitude range -115 - -105, there are a larger number of good restaurants than bad ones. 
 
 This observation is confirmed from the distribution of ratings by postcode. There are two regions of postcodes which have a larger number of good ratings than bad ratings and one region which has a larger number of bad ratings. 
+
+Considering the plot of ratings by state, it is clear that in some states there are a much larger number of reviews than in other states and hence it is not fair  to directly compare the number of good/bad restaurants. In particular IL and SC have very few restaurant ratings. A more interesting analysis can be done for states which have a large number of restaurants with rating for example AZ and NV. 
+
+```{r echo = FALSE}
+state_nz = restaurants_train_plot[restaurants_train_plot$state == 'AZ', ]
+ggplot(state_nz, aes(city, fill = rating)) + geom_bar()+ theme(axis.text.x = element_text(angle=45)) + ggtitle('Predictor: city in AZ')
+```
+
+```{r echo = FALSE}
+state_nv = restaurants_train_plot[restaurants_train_plot$state == 'NV', ]
+ggplot(state_nv, aes(city, fill = rating)) + geom_bar()+ theme(axis.text.x = element_text(angle=45)) + ggtitle('Predictor: city in NV')
+```
+
+Looking at the breakdown of ratings by state, the captials appear to have the largest number of recorded ratings. In Arizona, Phoenix stands out as a place with a large number of good restaurants and overall most of the cities appear to have more good than bad ratings. In Nevada, Las Vegas has the largest number of ratings but the distribution between good and bad is 50:50 so the location is less informative of the likelihood of a restaurant being good. 
 
 Overall, the location of a restaurant is only tenuously related to its rating. While in most of the locations in the training set there are approximately equal numbers of good and bad ratings, in a few specific locations, there are slightly more restaurants of one class than the other. This analysis suggests that predicting the rating of a restaurant based on its location alone would likely not be accurate. 
 
@@ -94,27 +107,21 @@ Hence we can interpret, for example, $\theta^g_5$ as the probability the word "p
 
 The Dirichlet distribution is a conjugate prior for a multinomial likelihood. This means that a posterior distribution formed from a Dirichlet prior and Multinomial likelihood will also follow a Dirichlet distribution (with different parameters). 
 
-The Multinomial distribution represents the probability of observing each possible outcome $c_i$ exactly $X_i$ times in a sequence of n yes/no trials. It is parameterised by a vector of occurence counts 'N'.  The Dirichlet distribution is a density over n positive numbers parameterised by a vector $\alpha$ - the dirichlet parameters α can be regarded as “pseudo-counts” from
-“pseudo-data”. Therefore the Dirichlet-Multinomial posterior is a Dirichlet distribution with parameters N + α. 
+The Multinomial distribution represents the probability of observing each possible outcome $c_i$ exactly $X_i$ times in a sequence of n yes/no trials. It is parameterised by a vector of occurence counts 'N'.  The Dirichlet distribution is a density over n positive numbers parameterised by a vector $\alpha$ - the dirichlet parameters $\alpha$ can be regarded as “pseudo-counts” from
+“pseudo-data”. Therefore the Dirichlet-Multinomial posterior is a Dirichlet distribution with parameters $N + \alpha$. 
 
 (b) From a Monte Carlo simulation of the Dirichlet posterior distribution for "good" restaurants, what is the posterior mean probability that the word "chocolate" is used?  From a Monte Carlo simulation of the Dirichlet posterior distribution for bad restaurants, what is the posterior mean probability that the word "chocolate" is used? **Hint**: use the `rdirichlet` function in the `MCMCpack` library. [15 points]
 
-Verifying that MCmultinomdirichlet and post_thetaA_r return similar outputs:
-
-```{r}
+```{r echo=FALSE, eval=FALSE}
+# Verifying that MCmultinomdirichlet and post_thetaA_r return similar outputs:
   yA = as.numeric(apply(restaurants_train[restaurants_train$rating == 1 ,22:121], 2, sum))
   K = length(yA)
   alpha0 = rep(2, K)
   post_thetaA_mc = MCmultinomdirichlet(yA, alpha0, mc = 2000) # good restaurants class
   post_thetaA_r = rdirichlet(2000, 2 + yA)
-```
-
-```{r}
-dim(post_thetaA_mc)
-```
-
-```{r}
-dim(post_thetaA_r)
+  
+  dim(post_thetaA_mc)
+  dim(post_thetaA_r)
 ```
 
 ```{r}
@@ -147,12 +154,11 @@ ER_A = posterior_mean_A_B(alpha=2, yA, 2000)
 ER_B = posterior_mean_A_B(alpha=2, yB, 2000)
 ```
 
-The probability of the word chocolated can be found. 
+The probability of the word chocolate in good/bad rated restaurants can be found. 
 
 ```{r}
-# find index of word chocolate:
-
 words = names(restaurants_train[22:121])
+# find index of word chocolate:
 chocolate_index = which(words %in% c("chocolate"))
 
 cat('good restaurant probability of occurence of chocolate', ER_A[chocolate_index])
@@ -217,7 +223,6 @@ posterior_pA = function(alpha, yA = NULL, yB = NULL, y_til = NULL){
 
 ```
 
-
 The output of the $posterior_pA$ function is the posterior probability $P(A \,|\, data)$ that the restaurant is 'good'. 
 
 One can use the above function to infer the rating for a given test restaurant by predicting rating 1 if $p_i = p(A \,|\, y_i, {data}) > 0.5$ and rating 0 otherwise.
@@ -248,7 +253,7 @@ dirichlet_preds_labels <- data.frame(probs=dirichlet.probs, labels=ifelse(test_l
 
 ```
 
-The confusion matrix shows that a large number of 'bad' restaurants are misclassified as good restaurants. This results in a class error rate of 21%. 
+The confusion matrix shows that a large number of 'bad' restaurants are misclassified as good restaurants. This results in a class error rate of 21% on the test set. 
 
 A histogram of the probabilities calcualted from the $posterior_pA$ function can be plotted color coded by their acutal class label. 
 
@@ -268,7 +273,7 @@ This problem suggests the use of a Generalised Additive model. The quanititate p
 
 First plot the response as a function of each of the predictors to view individual relationships between predictors and the response. 
 
-```{r}
+```{r echo = FALSE}
 restaurants_train_plot <- restaurants_train
 restaurants_train_plot$rating <- ifelse(restaurants_train_plot$rating == 1, 'good', 'bad')
 ggplot(restaurants_train_plot, aes(latitude, fill = rating)) + geom_density(alpha = 0.2) + ggtitle('Predictor: latitude')
@@ -285,7 +290,7 @@ ggplot(restaurants_train_plot, aes(RestaurantsReservations, fill = rating)) + ge
 ```
 
 From visualisation of the distribution of each individual predictor with the response, several preliminary observations can be made.
-* (latitude/longitude) There appears to be an approximately tri-modal distribution with the restaurants being clustered in 3 regions. Overall, there are approximately equal numbers of good/bad reviews in each region but in two specific latitidue regions, either good reviews dominate or bad reviews dominate. Restaurants in the latitude range 34.5-37 have higher number of bad ratings compared to restaurants in the latitude range 33-34.5 which have a larger number of good ratings. 
+* (latitude/longitude) There appears to be a multi-modal distribution with the restaurants being clustered in a few regions. Overall, there are approximately equal numbers of good/bad reviews in each region but in two specific latitidue regions, either good reviews dominate or bad reviews dominate. Restaurants in the latitude range 34.5-37 have higher number of bad ratings compared to restaurants in the latitude range 33-34.5 which have a larger number of good ratings. 
 * (avg_word_count) bad reviews tend to have slighty higher number of words compared to good reviews 
 * (review_count) good restaurants tend to have a larger number of overall reviews compared to bad restaurants 
 * (cuisine) The category of 'Bars' has the largest number of total reviews, however approx 50% of these are bad. Bakeries appear to have the smallest proportion of bad reviews compared to bars, fastfood and coffee/tea which have approx 50% good and 50% bad. 
@@ -295,7 +300,7 @@ From visualisation of the distribution of each individual predictor with the res
 
 From these observations, it appears that the following predictors have some predictive relationship with the response: latitude, longitude, avg_word_count, review_count and potentially cuisine. Post code is likely to be correlated with latitude/longitude so it will not be included. 
 
-```{r}
+```{r echo = FALSE}
 library(gam)
 restaurants.gam  <- gam(rating ~ s(avg_word_count) + s(review_count) + s(latitude) + s(longitude) + cuisine, data = restaurants_train)
 summary(restaurants.gam)
@@ -305,7 +310,7 @@ In the summary of the model, the chi squared test result of the smoothed predict
 
 The smooth of the predictors can also be plotted to determine if the smoothed terms are significantly non linear. 
 
-```{r}
+```{r echo = FALSE}
 plot(restaurants.gam, se=TRUE)
 ```
 
@@ -313,7 +318,7 @@ The avg_word_count predictor appears to have a non linear relationship with the 
 
 The latitude and longitude predictors show significant non linearity in their smoothing due to the values being concentrated in a few specific regions. There does not appear to be any clear trend in the smoothed values of these predictors.  
 
-This may be due to the fact that inidivudally, the latitude ang longitude predictors provide limited information about a restaurant's rating but the combination of both might provide a better prediction. An interation term could be useful for this purpose. 
+This may be due to the fact that inidivudally, the latitude and longitude predictors provide limited information about a restaurant's rating but the combination of both might provide a better prediction. 
 
 (b) For your model in part (a), summarize the predictive ability by computing a misclassification rate. [10 points]
 
@@ -351,6 +356,4 @@ print(classError(gam.test.predictions, restaurants_test$rating)$errorRate)
 ```
 
 The result of the likelihood ratio test shows that the model with the inclusion of the cuisine parameter is not statistically significant compared to the model without the cuisine predictor. Comparing the classification accuracies of the two models, the error rates only differ by 0.3%. Therefore it can be concluded that the cuisine predictor is not an important predictor of the probability of a good restaurant rating. 
-
-
 

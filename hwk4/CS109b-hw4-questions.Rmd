@@ -1,0 +1,383 @@
+---
+title: Homework 4 - SVMs & Return of the Bayes 
+subtitle: "Harvard CS109B, Spring 2017"
+date: "Feb 2017"
+output: pdf_document
+urlcolor: blue
+linkcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# svm library
+library('e1071')
+library('caret')
+library('ggplot2')
+library('GGally')
+library('mclust')
+library(MCMCpack)
+```
+
+
+# Problem 1: Celestial Object Classification
+
+SVMs are computationally intensive, much more so than other methods we've used in the course. Expect run times for your analyses to be much larger than before. Several SVM packages are available, we recommend using the `e1071` library, though you're free to use whatever package you feel comfortable with -- we'll provide extra hints for the `svm` function from this package. 
+
+In this problem, the task is to classify a celestial object into one of 4 categories using photometric measurements recorded about the object. The training and testing datasets are provided in the `dataset_1_train.txt` and `dataset_1_test.txt` respectively. Overall, there are a total of 1,379 celestial objects described by 61 attributes. The last column contains the object category we wish to predict, `Class`.
+
+We'll be working with Support Vector Machines, trying out different kernels, tuning, and other fun things. *Hint*: Use the `kernel`, `degree`, `cost`, `gamma` arguments of the `svm` function appropriately.
+
+First, ensure that the that `Class` is a factor (quantitative values). These should be object categories and not integer values -- use `as.factor` if needed. 
+
+## Load the data
+
+```{r echo=FALSE}
+celest_train = read.csv('./datasets/dataset_1_train.txt')
+celest_test = read.csv('./datasets/dataset_1_test.txt')
+
+# convert class to factor 
+celest_train$Class = as.factor(celest_train$Class)
+celest_test$Class = as.factor(celest_test$Class)
+
+# look at the split between classes in the training and testing set
+cat('training set class counts')
+table(celest_train$Class)
+cat('\ntesting set class counts')
+table(celest_test$Class)
+
+# # look at the predictors
+# names(celest_train)
+```
+
+There are 61 possible predictors in the data set. Out of the 4 classes in the response, the majority of observations in both the testing and training set are from class 3. 
+
+1. Fit an RBF kernel to the training set with parameters `gamma` and `cost` both set to 1. Use the model to predict on the test set. 
+
+```{r}
+model_1 = svm(Class ~ ., gamma = 1, cost = 1, data=celest_train, kernel='radial')
+model_1_test_predictions = predict(model_1, newdata=celest_test)
+model_1_train_predictions = predict(model_1, newdata=celest_train)
+print(summary(model_1))
+```
+
+2. Look at the confusion matricies for both the training and testing predictions from the above model. What do you notice about the predictions from this model?  *Hint*: The `confusionMatrix` function in the `caret` package is quite useful.
+
+```{r}
+cat('\n training set predictions confusion matrix\n')
+confusionMatrix(model_1_train_predictions, celest_train$Class)
+cat('error', )
+cat('\n testing set predictions confusion matrix\n')
+confusionMatrix(model_1_test_predictions, celest_test$Class)
+```
+
+With the training set, the classification accuracy is 1 (model overfitting to the data). With the testing set, all observations are predicted to be in class 3. Despite this, the accuracy is 72% due to the fact that the majority of testing samples are from class 3.
+
+3. For the RBF kernel, make a figure showing the effect of the kernel parameter $\gamma$ on the training and test errors? Consider some values of `gamma` between 0.001 and 0.3. Explain what you are seeing. 
+
+The gamma parameter controls the smoothness of the mapping of the predictors to a higher dimensional space. 
+
+```{r}
+gammas = seq(0.001, 0.3, length.out = 100)
+test_errors = rep(0., length(gammas))
+train_errors = rep(0., length(gammas))
+for (i in 1:length(gammas)) {
+  m = svm(Class ~ ., gamma = gammas[i], cost = 1, data=celest_train, kernel='radial')
+  m_test_predictions = predict(m, newdata=celest_test)
+  m_train_predictions = predict(m, newdata=celest_train)
+  train_errors[i] = classError(m_train_predictions, celest_train$Class)$errorRate
+  test_errors[i] = classError(m_test_predictions, celest_test$Class)$errorRate
+}
+
+errors = data.frame(gammas = gammas, testerror = test_errors, trainerror = train_errors)
+
+ggplot(errors, aes(gammas)) + geom_point(aes(y=testerror), color='red') + 
+  geom_point(aes(y=trainerror), color='green') + 
+  ylab("Error") +
+  scale_color_manual(labels = c("testerror", "trainerror"), values = c("red", "green"))
+```
+```{r}
+best_gamma = gammas[which(test_errors==min(test_errors))]
+cat('gamma with lowest test error:', best_gamma)
+cat('\ntest error:', min(test_errors))
+```
+
+As the value of gamma increases, initially both the training and testing errors decrease. However when gamma is increased past 0.02, while the training error decreases to 0, the testing error rises rapidly and reaches a plateau at 30%.
+
+This suggests that small values of gamma are required in order to achieve low error for predictions on the test set (small amount of smoothing). 
+
+4. For the RBF kernel, make a figure showing the effect of the `cost` parameter on the training and test errors? Consider some values of `cost` in the range of 0.1 to 20. Explain what you are seeing. 
+
+The cost is a parameter used to control the number and severity of the violations to the margin that will be tolerated. As the value of the cost increases, the margin will widen. 
+
+The best value of gamma found from part 3 is used to tune the cost. 
+
+```{r}
+costs = seq(0.1, 20, length.out = 50)
+test_errors = rep(0., length(costs))
+train_errors = rep(0., length(costs))
+for (i in 1:length(costs)) {
+  m = svm(Class ~ ., gamma = best_gamma, cost = costs[i], data=celest_train, kernel='radial')
+  m_test_predictions = predict(m, newdata=celest_test)
+  m_train_predictions = predict(m, newdata=celest_train)
+  train_errors[i] = classError(m_train_predictions, celest_train$Class)$errorRate
+  test_errors[i] = classError(m_test_predictions, celest_test$Class)$errorRate
+}
+
+errors = data.frame(costs = costs, testerror = test_errors, trainerror = train_errors)
+
+ggplot(errors, aes(costs)) + geom_point(aes(y=testerror), color='red') + 
+  geom_point(aes(y=trainerror), color='green') + 
+  ylab("Error") +
+  scale_color_manual(labels = c("testerror", "trainerror"), values = c("red", "green"))
+```
+
+```{r}
+best_cost = costs[which(test_errors==min(test_errors))]
+cat('cost with lowest test error:', best_cost)
+cat('\ntest error:', min(test_errors))
+```
+
+Initially, as the cost increases both the testing and training error decrease up to a cost of approximately 2.5, after which the training error continues to decrease but the testing error plateaus and then starts to increase. This suggests that a value of the cost between 1-2.5 would result in the lowest error on the testing set. 
+
+For low costs, the classifier will have a small margin and will be highly fit to the data - i.e. low bias, but high variance. When the cost is larger, the margin is wider, which results in a classifier which has lower variance but higher bias. 
+
+5. Now the fun part: fit SVM models with the linear, polynomial (degree 2) and RBF kernels to the training set, and report the misclassification error on the test set for each model. Do not forget to tune all relevant parameters using 5-fold cross-validation on the training set (tuning may take a while!). *Hint*: Use the `tune` function from the `e1071` library. You can plot the error surface using `plot` on the output of a `tune` function.
+
+## Linear kernel 
+
+```{r}
+# only need to tune the cost
+linear_m.tune = tune(svm,
+                Class ~ .,
+                data = celest_train,
+                kernel="linear",
+                tunecontrol = tune.control(sampling = "cross", cross = 5),
+                ranges = list(cost = seq(0.1, 20, length.out = 50))) 
+
+plot(linear_m.tune)
+```
+
+```{r}
+cat('best cost ', linear_m.tune$best.parameters$cost)
+# Misclassification error on the training set
+linear_m.model = svm(Class ~ ., 
+                     data=celest_train, 
+                     kernel="linear",
+                     cost=linear_m.tune$best.parameters$cost)
+linear_m.test_predictions = predict(linear_m.model, celest_test)
+confusionMatrix(linear_m.test_predictions, celest_test$Class)
+```
+
+With the optimum cost found from cross validation, the accuracy on the test set is 98.9%. 
+
+## 2nd degree polynomial kernel
+
+```{r}
+# need to tune cost
+poly_m.tune = tune(svm,
+                Class ~ .,
+                data = celest_train,
+                kernel="polynomial", 
+                degree = 2,
+                tunecontrol = tune.control(sampling = "cross", cross = 5),
+                ranges = list(cost = seq(0.1, 20, length.out = 20))) 
+
+plot(poly_m.tune)
+```
+
+For the polynomial kernel, as the cost increases, the cross validation error decreases. 
+
+```{r}
+cat('best cost', poly_m.tune$best.parameters$cost, '\n')
+# Misclassification error on the training set
+poly_m.model = svm(Class ~ ., 
+                     data=celest_train, 
+                     kernel="linear",
+                     cost=poly_m.tune$best.parameters$cost)
+poly_m.test_predictions = predict(poly_m.model, celest_test)
+confusionMatrix(poly_m.test_predictions, celest_test$Class)
+```
+
+With the best cost from cross validation, the polynomial kernel achieves a test accuracy of 96% which is lower than the accuracy from a linear kernel. 
+
+## RBF kernel
+
+6. What is the best model in terms of testing accuracy? How does your final model compare with a naive classifier that predicts the most common class (3) on all points?
+
+*Hint:* This is a moderate-sized dataset, but keep in mind that computation will always be a limiting factor when tuning machine learning algorithms. For timing reference, attempting 40 combinations of `cost` and `gamma` using an RBF kernel on the training dataset took about 15 minutes to tune on a recent Macbook. The other kernels were much faster, e.g. linear should be done in only a few minutes.
+
+```{r}
+# need to tune cost and gamma
+rbf_m.tune <- tune(svm,
+                Class ~ .,
+                data = celest_train,
+                ranges = list(gamma = seq(0.001, 0.3, length.out=20), 
+                              cost = seq(0.1, 20, length.out = 20)))
+```
+
+```{r}
+plot(rbf_m.tune)
+```
+
+
+```{r}
+cat('best cost', rbf_m.tune$best.parameters$cost, '\n')
+cat('best gamma', rbf_m.tune$best.parameters$gamma, '\n')
+# Misclassification error on the training set
+rbf_m.model = svm(Class ~ ., 
+                     data=celest_train, 
+                     cost=rbf_m.tune$best.parameters$cost,
+                     gamma=rbf_m.tune$best.parameters$gamma)
+rbf_m.test_predictions = predict(rbf_m.model, celest_test)
+confusionMatrix(rbf_m.test_predictions, celest_test$Class)
+```
+
+The highest accuracy with an RBF kernel is 96.8%. 
+
+## Naive classifier accuracy
+
+```{r}
+naive_predictions = rep(3, nrow(celest_test))
+cat('accuracy: ', 1- classError(naive_predictions, celest_test$Class)$errorRate)
+```
+
+The best model is superior to the naive classifier which predicts the most common class. 
+
+# Problem 2: Return of the Bayesian Hierarchical Model
+
+We're going to continue working with the dataset introduced in Homework 3 about contraceptive usage by 1934 Bangladeshi women. The data are in `dataset_2.txt` which is now a merge of the training and test data that appeared in Homework 2.
+
+In order to focus on the benefits of Hierarchical Modeling we're going to consider a model with only one covariate (and intercept term). 
+
+Load data
+
+```{r, echo=FALSE}
+bangladesh_data = read.csv('./datasets/dataset_2.txt')
+
+# look at class proportions
+table(bangladesh_data$contraceptive_use)
+
+# split the data into testing and training sets: 2/3 train, 1/3 test
+in.train <- sample(1:nrow(bangladesh_data), floor(2*nrow(bangladesh_data)/3))
+train <- bangladesh_data[in.train, ]
+test <- bangladesh_data[-in.train, ]
+```
+
+1. Fit the following three models
+
+	(a) Pooled Model: a single logistic regression for `contraceptive_use` as a function of `living.children`.  Do not include `district` information.  You should use the `glm` function to fit this model. Interpret the estimated model.
+	
+```{r}
+pooled.model = glm(contraceptive_use ~ living.children, data=bangladesh_data, family = binomial(link = "logit"))
+summary(pooled.model)
+pooled.test_predictions = ifelse(predict(pooled.model, bangladesh_data, type='response') > .5, 1, 0)
+confusionMatrix(pooled.test_predictions, bangladesh_data$contraceptive_use)
+```
+	
+All predictions are class 0. 
+	
+	(b) Unpooled Model: a model that instead fits a separate logistic regression for each `district`.  Use the `glm` function to this model.  *Hint*  The separate logistic regression models can be fit using one application of `glm` by having the model formula be `contraceptive_use ~ -1 + living.children * as.factor(district)`.   Explain why this model formula is accomplishing the task of fitting separate models per district.  Examine the summary output of the fitted model.  Briefly explain the reason for many of the `NA` estimates of the coefficients.
+	
+```{r}
+unpooled.model = glm(contraceptive_use ~ -1 + living.children*as.factor(district), data=bangladesh_data, family = binomial(link = "logit"))
+summary(unpooled.model)
+unpooled.test_predictions = ifelse(predict(unpooled.model, bangladesh_data, type='response') > .5, 1, 0)
+confusionMatrix(unpooled.test_predictions, bangladesh_data$contraceptive_use)
+```
+
+With an unpooled model the accuracy increases to 66.8% from 60% as differences between villages are being taken into account in the model. 
+
+	(c) Bayesian Hierarchical Logistic Model: a Bayesian hierarchical logistic regression model with `district` as the grouping variable.  Use the `MCMChlogit` function in the `MCMCpack` library using arguments similar to the reaction time model in the lecture notes.  Make sure that both coefficients of the linear predictor are assumed to vary by `district` in the model specification.  Describe briefly in words how the results of this model are different from the pooled and unpooled models of parts (a) and (b).
+
+```{r}
+hierarchichal.model = MCMChlogit(fixed = contraceptive_use ~ living.children +age_mean,
+                                 random = ~living.children + age_mean,
+                                  group="district", 
+                                  data=bangladesh_data,
+                                  burnin = 5000,
+                                  mcmc = 10000,
+                                  thin = 1,
+                                  verbose = 1,
+                                  beta.start = NA,
+                                  sigma2.start = NA,
+                                  Vb.start = NA,
+                                  mubeta = c(0,0),  # Can choose c(0,0) for c(intcpt, slope), but
+                                                       # these prior means are more believable as guesses
+                                  Vbeta = 10000, # anything very large to reflect uncertainty
+                                  r = 3,  # anything small, at least as large as number of coefs, i.e., 2
+                                  R = diag(c(1, 0.1, 0.1)), # diagonal, with larger scale for intercept,
+                                                       # small is non-informative.
+                                  nu = 0.001,  # default for non-informative prior
+                                  delta = 0.001)
+```
+
+2. In class we discussed that one of the benefits of using Bayesian hierarchical models is that it naturally shares information across the groupings. In this case, information is shared across districts. This is generally known as shrinkage. To explore the degree of shrinkage, we are going to compare coefficients across models and districts based on your results from part 1 above.
+
+	(a) Create a single figure that shows the estimated coefficient to `living.children` as a function of district in each of the three models above.  The horizontal axis should be the districts, and the vertical axis should be the estimated coefficient value (generally three estimated coefficients at each district corresponding to the three models).  Make sure that the points plotted for each model are distinct (different colors and/or plotting characters), and that you create a legend identifying the model-specific points on the figure.  You may want to consider adjusting the vertical axis if some estimated coefficients are so large (positively or negatively) that they obscure the general pattern of the bulk of points. Be sure to explain your decision.
+	
+```{r}
+districts = unique(bangladesh_data$district)
+# 60 districts 
+num_districts = length(districts)
+start = num_districts+1
+end = start+num_districts
+children_district_coeffs_unpooled = unpooled.model$coefficients[start:end]
+length(children_district_coeffs_unpooled)
+children_district_coeffs_unpooled
+
+
+start = num_districts+2
+end = start+num_districts -1
+children_district_coeffs_hierarchichal = hierarchichal.model$mcmc[start:end]
+length(children_district_coeffs_hierarchichal)
+hierarchichal.model$mcmc
+model_coeffs_compare = data.frame
+```
+	
+	(b) Write a short summary (300 words or less) that interprets the graph from part (a).  Pay particular attention to the relationship between the coefficients within each district, and how or whether the number of observations within each district plays a role in the relationship.  You may speculate on the reasons for what you are seeing. 
+
+
+3. Another benefit of shrinkage is how it affects probability estimates (recall the lucky, drunk friend from lecture whose classical estimate for the probability of guessing correctly was 100%). Extract the estimated probabilities from each model applied to the training data.  That is, for the pooled and unpooled analyses, use the `predict` function applied to the fitted object, using the argument `type="response"`.  For the hierarchical model, the `$theta.pred` component of the fitted model contains the estimated probabilities.
+	
+	(a) Plot histograms of the vectors of probability estimates for each model separately.  Make sure you standardize the horizontal axis so that the scales are the same.  How does the distribution of estimated probabilities compare across the three models?
+	
+```{r}
+pooled.predictions = predict(pooled.model, bangladesh_data, type='response')
+unpooled.predictions = predict(unpooled.model, bangladesh_data, type='response')
+
+# function to scale a column vector between 0 and 1
+scale01 <- function(x){(x-min(x))/(max(x)-min(x))}
+
+n_obs = nrow(bangladesh_data)
+
+# create a column of types
+model_type = c(rep('pooled', n_obs),rep('unpooled', n_obs),rep('hierarchichal', n_obs))
+# create a column of probabilities
+model_predictions = c(scale01(pooled.predictions),scale01(unpooled.predictions),scale01(hierarchichal.model$theta.pred))
+
+# create a dataframe with preductions and model type
+predictions = data.frame(data=model_predictions, model=model_type)
+
+# create hisotgram of probabilities from each model 
+ggplot(predictions, aes(data, fill=model)) + geom_density(alpha = 0.2)
+```
+	
+	
+	(b) Create a scatter plot comparing predicted values from Unpooled and Hierarchical Models, making sure that the scale of the horizontal and vertical axes are the same, and that the plotting region is square rather than rectangular. Include on the plot the line $y=x$ (why do you think this is a useful line to superimpose?).  Briefly interpret the relationship between the probability estimates for these two models.  Are there particular features of the plot that highlight the intended benefits of using a hierarchical model over the unpooled analysis?  Briefly explain.
+
+```{r}
+unpooled_hierarchical = data.frame(unpooled= scale01(unpooled.predictions), hierarchichal = scale01(hierarchichal.model$theta.pred))
+
+ggplot(unpooled_hierarchical, aes(x=hierarchichal, y=unpooled)) + geom_point() + coord_fixed() + geom_abline(intercept=0, slope=1)
+```
+
+# Problem 3: AWS Preparation
+
+In prepartion for the upcoming Spark and Deep Learning modules, submit your AWS
+account information. This should have been created in Homework 0. We need specifically:
+
+* The email address associated with your AWS account
+* The email address associated with your Harvard ID, if different from above
+* Your AWS ID. This should be a 10 digit number. ([Instructions](http://docs.aws.amazon.com/IAM/latest/UserGuide/console_account-alias.html))
+
+We need this information to enable GPU capable compute instances.
