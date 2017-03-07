@@ -276,7 +276,15 @@ confusionMatrix(pooled.test_predictions, bangladesh_data$contraceptive_use)
 	
 All predictions are class 0. 
 	
-	(b) Unpooled Model: a model that instead fits a separate logistic regression for each `district`.  Use the `glm` function to this model.  *Hint*  The separate logistic regression models can be fit using one application of `glm` by having the model formula be `contraceptive_use ~ -1 + living.children * as.factor(district)`.   Explain why this model formula is accomplishing the task of fitting separate models per district.  Examine the summary output of the fitted model.  Briefly explain the reason for many of the `NA` estimates of the coefficients.
+	(b) Unpooled Model: a model that instead fits a separate logistic regression for each `district`.  Use the `glm` function to this model.  *Hint*  The separate logistic regression models can be fit using one application of `glm` by having the model formula be `contraceptive_use ~ -1 + living.children * as.factor(district)`.   Explain why this model formula is accomplishing the task of fitting separate models per district.  
+	
+With this formula we get an intercept and slope for every district, the only difference is if we kept overall model intercept int the model than for district 101 we would not get a separate term (it would be the overall intercept).
+
+When using factor covariates, there is usually a level (in this case district) that is taken to be baseline. Therefore the coefficient for district 101 is just the baseline coefficient. 
+
+There is an overall slope for living.children which needs to be added to the slope for each of the districts (treating the first one as district 101). The district specific coefficient do not *replace* the overall slope, but instead *add* to it.
+
+Examine the summary output of the fitted model.  
 	
 ```{r}
 unpooled.model = glm(contraceptive_use ~ -1 + living.children*as.factor(district), data=bangladesh_data, family = binomial(link = "logit"))
@@ -290,8 +298,8 @@ With an unpooled model the accuracy increases to 66.8% from 60% as differences b
 	(c) Bayesian Hierarchical Logistic Model: a Bayesian hierarchical logistic regression model with `district` as the grouping variable.  Use the `MCMChlogit` function in the `MCMCpack` library using arguments similar to the reaction time model in the lecture notes.  Make sure that both coefficients of the linear predictor are assumed to vary by `district` in the model specification.  Describe briefly in words how the results of this model are different from the pooled and unpooled models of parts (a) and (b).
 
 ```{r}
-hierarchichal.model = MCMChlogit(fixed = contraceptive_use ~ living.children +age_mean,
-                                 random = ~living.children + age_mean,
+hierarchichal.model = MCMChlogit(fixed = contraceptive_use ~ living.children,
+                                 random = ~living.children,
                                   group="district", 
                                   data=bangladesh_data,
                                   burnin = 5000,
@@ -301,38 +309,75 @@ hierarchichal.model = MCMChlogit(fixed = contraceptive_use ~ living.children +ag
                                   beta.start = NA,
                                   sigma2.start = NA,
                                   Vb.start = NA,
+                                  FixOD=1,
                                   mubeta = c(0,0),  # Can choose c(0,0) for c(intcpt, slope), but
                                                        # these prior means are more believable as guesses
                                   Vbeta = 10000, # anything very large to reflect uncertainty
-                                  r = 3,  # anything small, at least as large as number of coefs, i.e., 2
-                                  R = diag(c(1, 0.1, 0.1)), # diagonal, with larger scale for intercept,
+                                  r = 2,  # anything small, at least as large as number of coefs, i.e., 2
+                                  R = diag(c(1, 0.1)), # diagonal, with larger scale for intercept,
                                                        # small is non-informative.
                                   nu = 0.001,  # default for non-informative prior
                                   delta = 0.001)
 ```
+
+```{r}
+summary(hierarchichal.model$mcmc)
+mcmc_coeffs = data.frame(hierarchichal.model$mcmc)
+coeff_names <- paste0(rep('b.living.children.', 60), seq(101,160,by=1), sep="")
+mcmc_coeff_districts = mcmc_coeffs[coeff_names]
+mcmc_coeff_districts_mean = apply(mcmc_coeff_districts, 2, mean)
+```
+
 
 2. In class we discussed that one of the benefits of using Bayesian hierarchical models is that it naturally shares information across the groupings. In this case, information is shared across districts. This is generally known as shrinkage. To explore the degree of shrinkage, we are going to compare coefficients across models and districts based on your results from part 1 above.
 
 	(a) Create a single figure that shows the estimated coefficient to `living.children` as a function of district in each of the three models above.  The horizontal axis should be the districts, and the vertical axis should be the estimated coefficient value (generally three estimated coefficients at each district corresponding to the three models).  Make sure that the points plotted for each model are distinct (different colors and/or plotting characters), and that you create a legend identifying the model-specific points on the figure.  You may want to consider adjusting the vertical axis if some estimated coefficients are so large (positively or negatively) that they obscure the general pattern of the bulk of points. Be sure to explain your decision.
 	
 ```{r}
-districts = unique(bangladesh_data$district)
+require(gridExtra)
 # 60 districts 
+districts = unique(bangladesh_data$district)
 num_districts = length(districts)
-start = num_districts+1
-end = start+num_districts
-children_district_coeffs_unpooled = unpooled.model$coefficients[start:end]
-length(children_district_coeffs_unpooled)
-children_district_coeffs_unpooled
 
+# pooled coefficients - all the same just the baseline
+pooled_coeffs = rep(as.numeric(pooled.model$coefficients[2]), num_districts)
 
+# indexes to retrieve district coefficients from 102-160 (district 101 is the baseline so use slope from living.children)
 start = num_districts+2
-end = start+num_districts -1
-children_district_coeffs_hierarchichal = hierarchichal.model$mcmc[start:end]
-length(children_district_coeffs_hierarchichal)
-hierarchichal.model$mcmc
-model_coeffs_compare = data.frame
+end = start+num_districts -2
+
+# unpooled coeffs
+unpooled_baseline_slope = unpooled.model$coefficients[1] # district 101
+baseline = rep(unpooled_baseline_slope, num_districts)
+children_district_coeffs_unpooled = c(0, unpooled.model$coefficients[start:end])
+children_district_coeffs_unpooled_added_baseline = baseline + children_district_coeffs_unpooled
+
+all_coeffs = c(children_district_coeffs_unpooled_added_baseline,pooled_coeffs, mcmc_coeff_districts_mean)
+all_labels = c(rep('unpooled', num_districts), rep('pooled', num_districts), rep('hierarchichal', num_districts))
+district_labels = seq(101,160, by=1)
+model_coeffs_compare = data.frame(district=c(seq(101,160, by=1), seq(101,160, by=1),seq(101,160, by=1)), coeffs=all_coeffs, labels=all_labels)
+
+# plot coeff for each district
+plot(district_labels, children_district_coeffs_unpooled_added_baseline)
+points(pooled_coeffs)
+ggplot(model_coeffs_compare, aes(x=district, y=all_coeffs, color=labels)) + geom_point() + ylim(c(-2,2))
+use_counts = aggregate(contraceptive_use ~ district, bangladesh_data, sum)
+ggplot(use_counts, aes(x=district, y=contraceptive_use)) + geom_point()
 ```
+```{r}
+top_count_indices = sort(use_counts$contraceptive_use, decreasing=TRUE, index.return=TRUE)
+districts_with_top_counts = use_counts$district[top_count_indices$ix [0:10]]
+cat('districts with top 10 counts', districts_with_top_counts)
+
+# districts with largest unpooled coefficients 
+top_coeff_indices = sort(children_district_coeffs_unpooled_added_baseline, decreasing=TRUE, index.return=TRUE)
+cat('\ndistricts with largest unpooled coefficients ', district_labels[top_coeff_indices$ix[0:10]])
+
+# districts with largest hierarchichal coefficients 
+top_coeff_indices = sort(mcmc_coeff_districts_mean, decreasing=TRUE, index.return=TRUE)
+cat('\ndistricts with largest hierarchichal coefficients ', district_labels[top_coeff_indices$ix[0:10]])
+```
+
 	
 	(b) Write a short summary (300 words or less) that interprets the graph from part (a).  Pay particular attention to the relationship between the coefficients within each district, and how or whether the number of observations within each district plays a role in the relationship.  You may speculate on the reasons for what you are seeing. 
 
