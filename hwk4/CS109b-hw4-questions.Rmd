@@ -1,7 +1,8 @@
 ---
 title: Homework 4 - SVMs & Return of the Bayes 
 subtitle: "Harvard CS109B, Spring 2017"
-date: "Feb 2017"
+date: "8th March 2017"
+author: "Nikhila Ravi"
 output: pdf_document
 urlcolor: blue
 linkcolor: blue
@@ -65,7 +66,6 @@ print(summary(model_1))
 ```{r}
 cat('\n training set predictions confusion matrix\n')
 confusionMatrix(model_1_train_predictions, celest_train$Class)
-cat('error', )
 cat('\n testing set predictions confusion matrix\n')
 confusionMatrix(model_1_test_predictions, celest_test$Class)
 ```
@@ -241,7 +241,7 @@ naive_predictions = rep(3, nrow(celest_test))
 cat('accuracy: ', 1- classError(naive_predictions, celest_test$Class)$errorRate)
 ```
 
-The best model is superior to the naive classifier which predicts the most common class. 
+The best model in terms of testing accuracy is the SVM with linear kernel which achieves an accuracy of 98.5% - this is far superior to the naive classifier which predicts the most common class which only has an accuracy of 72.3%. 
 
 # Problem 2: Return of the Bayesian Hierarchical Model
 
@@ -274,30 +274,32 @@ pooled.test_predictions = ifelse(predict(pooled.model, bangladesh_data, type='re
 confusionMatrix(pooled.test_predictions, bangladesh_data$contraceptive_use)
 ```
 	
-All predictions are class 0. 
+When using the model to make predictions, all the predictions are class 0. All the districts are treated equally and no district specific variation is taken into account. 
 	
 	(b) Unpooled Model: a model that instead fits a separate logistic regression for each `district`.  Use the `glm` function to this model.  *Hint*  The separate logistic regression models can be fit using one application of `glm` by having the model formula be `contraceptive_use ~ -1 + living.children * as.factor(district)`.   Explain why this model formula is accomplishing the task of fitting separate models per district.  
 	
-With this formula we get an intercept and slope for every district, the only difference is if we kept overall model intercept int the model than for district 101 we would not get a separate term (it would be the overall intercept).
+With this formula we get an intercept and slope for every district - subtraction of the overall intercept is required as if we kept overall model intercept in the model, then for district 101 we would not get a separate term (it would be the overall intercept).
 
-When using factor covariates, there is usually a level (in this case district) that is taken to be baseline. Therefore the coefficient for district 101 is just the baseline coefficient. 
+When using factor covariates, there is usually a level (in this case a district) that is taken to be baseline. Therefore the coefficient for district 101 is just the baseline coefficient for living.chidren. 
 
-There is an overall slope for living.children which needs to be added to the slope for each of the districts (treating the first one as district 101). The district specific coefficient do not *replace* the overall slope, but instead *add* to it.
+There is an overall slope for living.children which needs to be added to the slope for each of the districts (treating the first one as district 101). The district specific coefficients do not *replace* the overall slope, but instead *add* to it.
 
 Examine the summary output of the fitted model.  
 	
-```{r}
+```{r echo=FALSE}
 unpooled.model = glm(contraceptive_use ~ -1 + living.children*as.factor(district), data=bangladesh_data, family = binomial(link = "logit"))
 summary(unpooled.model)
 unpooled.test_predictions = ifelse(predict(unpooled.model, bangladesh_data, type='response') > .5, 1, 0)
 confusionMatrix(unpooled.test_predictions, bangladesh_data$contraceptive_use)
 ```
 
-With an unpooled model the accuracy increases to 66.8% from 60% as differences between villages are being taken into account in the model. 
+Each district has it's own coefficient for 'living.children'. Examining the p values of these coefficients, only a small proportion of the districts appear to have coefficients which are statistically significant at the 0.05 level or below. 
+
+With an unpooled model the accuracy increases to 66.8% from 60% as differences in contraceptive use between villages are being taken into account in the model, however the increase in accuracy could also be seen as a sign of overfitting. Some district coefficients are very large - the model assumes error independence between districts and so outliers within a district can cause the coefficients for that district to be large. 
 
 	(c) Bayesian Hierarchical Logistic Model: a Bayesian hierarchical logistic regression model with `district` as the grouping variable.  Use the `MCMChlogit` function in the `MCMCpack` library using arguments similar to the reaction time model in the lecture notes.  Make sure that both coefficients of the linear predictor are assumed to vary by `district` in the model specification.  Describe briefly in words how the results of this model are different from the pooled and unpooled models of parts (a) and (b).
 
-```{r}
+```{r echo=FALSE}
 hierarchichal.model = MCMChlogit(fixed = contraceptive_use ~ living.children,
                                  random = ~living.children,
                                   group="district", 
@@ -320,7 +322,7 @@ hierarchichal.model = MCMChlogit(fixed = contraceptive_use ~ living.children,
                                   delta = 0.001)
 ```
 
-```{r}
+```{r echo=FALSE}
 summary(hierarchichal.model$mcmc)
 mcmc_coeffs = data.frame(hierarchichal.model$mcmc)
 coeff_names <- paste0(rep('b.living.children.', 60), seq(101,160,by=1), sep="")
@@ -328,6 +330,7 @@ mcmc_coeff_districts = mcmc_coeffs[coeff_names]
 mcmc_coeff_districts_mean = apply(mcmc_coeff_districts, 2, mean)
 ```
 
+With the Bayesian Hierarchichal model, there is again a separate coefficient 'living.children' for each of the districts, however the output of the model is a distribution for each coefficient not a single value. There are 10,000 values drawn for each coefficient so the mean or some other measure of the coefficient needs to be used to compare the coeffificients to those resulting from the other models. 
 
 2. In class we discussed that one of the benefits of using Bayesian hierarchical models is that it naturally shares information across the groupings. In this case, information is shared across districts. This is generally known as shrinkage. To explore the degree of shrinkage, we are going to compare coefficients across models and districts based on your results from part 1 above.
 
@@ -358,29 +361,44 @@ district_labels = seq(101,160, by=1)
 model_coeffs_compare = data.frame(district=c(seq(101,160, by=1), seq(101,160, by=1),seq(101,160, by=1)), coeffs=all_coeffs, labels=all_labels)
 
 # plot coeff for each district
-plot(district_labels, children_district_coeffs_unpooled_added_baseline)
-points(pooled_coeffs)
-ggplot(model_coeffs_compare, aes(x=district, y=all_coeffs, color=labels)) + geom_point() + ylim(c(-2,2))
-use_counts = aggregate(contraceptive_use ~ district, bangladesh_data, sum)
-ggplot(use_counts, aes(x=district, y=contraceptive_use)) + geom_point()
+ggplot(model_coeffs_compare, aes(x=district, y=all_coeffs, color=labels)) + geom_point() + ggtitle('Comparison of model coefficients')
+ggplot(model_coeffs_compare, aes(x=district, y=all_coeffs, color=labels)) + geom_point() + ylim(c(-2,2)) + ggtitle('Comparison of model coefficients with smaller y axis limits')
+use_counts = aggregate(contraceptive_use ~ district, bangladesh_data, length)
+use_counts$contraceptive_use_norm <- use_counts$contraceptive_use/sum(use_counts$contraceptive_use)
+ggplot(use_counts, aes(x=district, y=contraceptive_use)) + geom_point() + ggtitle('Counts of observations per district')
 ```
+
+
 ```{r}
 top_count_indices = sort(use_counts$contraceptive_use, decreasing=TRUE, index.return=TRUE)
 districts_with_top_counts = use_counts$district[top_count_indices$ix [0:10]]
-cat('districts with top 10 counts', districts_with_top_counts)
+cat('top counts of observations', top_count_indices$x[0:10])
+cat('\ndistricts with top counts', districts_with_top_counts)
 
 # districts with largest unpooled coefficients 
-top_coeff_indices = sort(children_district_coeffs_unpooled_added_baseline, decreasing=TRUE, index.return=TRUE)
-cat('\ndistricts with largest unpooled coefficients ', district_labels[top_coeff_indices$ix[0:10]])
+top_coeff_indices_unpooled = sort(children_district_coeffs_unpooled_added_baseline, decreasing=TRUE, index.return=TRUE)
+cat('\ndistricts with largest unpooled coefficients ', district_labels[top_coeff_indices_unpooled$ix[0:10]])
 
 # districts with largest hierarchichal coefficients 
-top_coeff_indices = sort(mcmc_coeff_districts_mean, decreasing=TRUE, index.return=TRUE)
-cat('\ndistricts with largest hierarchichal coefficients ', district_labels[top_coeff_indices$ix[0:10]])
+top_coeff_indices_h = sort(mcmc_coeff_districts_mean, decreasing=TRUE, index.return=TRUE)
+cat('\ndistricts with largest hierarchichal coefficients ', district_labels[top_coeff_indices_h$ix[0:10]])
+
+# district in common with top counts and models
+cat('\ndistricts in common with top coeffs in both models ', intersect(district_labels[top_coeff_indices_h$ix[0:10]], district_labels[top_coeff_indices_unpooled$ix[0:10]]))
+
+cat('\ndistricts in common with top counts and largest unpooled coeffs ', intersect(districts_with_top_counts, district_labels[top_coeff_indices_unpooled$ix[0:10]]))
+
+cat('\ndistricts in common with top counts and largest hierarchichal coeffs ', intersect(districts_with_top_counts, district_labels[top_coeff_indices_h$ix[0:10]]))
+
 ```
-
 	
-	(b) Write a short summary (300 words or less) that interprets the graph from part (a).  Pay particular attention to the relationship between the coefficients within each district, and how or whether the number of observations within each district plays a role in the relationship.  You may speculate on the reasons for what you are seeing. 
+	(b) Write a short summary (300 words or less) that interprets the graph from part (a). Pay particular attention to the relationship between the coefficients within each district, and how or whether the number of observations within each district plays a role in the relationship.  You may speculate on the reasons for what you are seeing. 
+	
+The unpooled and hierarchichal model coefficients show that there are differences between districts which the pooled model is unable to capture.  With the pooled model, all districts have the same coefficient estimate. With the unpooled model, every district is allowed to differ completely from every other district as only the district specific data is used in the model. However this also means that the coefficient values are very sensitive to outliers, can vary widely and often can be very large (some points are off the scale of the plot shown above). Due to the large range in the unpooled coefficient estimates, the pooled model would result in a more stable model compared to the unpooled model. 
 
+Compared to the unpooled model, the coefficients of the hierarchichal model benefit from shrinkage. Shrinkage describes the process by which the coefficient estimates are "pulled" towards the group-mean as a result of the common group distribution. We  assume the intercepts and slopes come from a normal distribution centered around their respective group mean with a certain standard deviation -- district specific coefficients for living.children very far away from the group mean have very low probability under the normality assumption. This results in the coefficients from the hierarchichal model being in a smaller overall range compared to the unpooled model and in many cases being smaller when compared individually for each district. 
+
+Comparing the coefficients by the number of observations within each district, there does not appear to be any significant connection with the largest coefficient values from either model. The hierarchichal and pooled model have large coefficient values for many of the same districts but these do not correspond to the districts with fewer observations. 
 
 3. Another benefit of shrinkage is how it affects probability estimates (recall the lucky, drunk friend from lecture whose classical estimate for the probability of guessing correctly was 100%). Extract the estimated probabilities from each model applied to the training data.  That is, for the pooled and unpooled analyses, use the `predict` function applied to the fitted object, using the argument `type="response"`.  For the hierarchical model, the `$theta.pred` component of the fitted model contains the estimated probabilities.
 	
@@ -401,28 +419,35 @@ model_type = c(rep('pooled', n_obs),rep('unpooled', n_obs),rep('hierarchichal', 
 model_predictions = c(scale01(pooled.predictions),scale01(unpooled.predictions),scale01(hierarchichal.model$theta.pred))
 
 # create a dataframe with preductions and model type
-predictions = data.frame(data=model_predictions, model=model_type)
+predictions = data.frame(probabilities=model_predictions, model=model_type)
 
 # create hisotgram of probabilities from each model 
-ggplot(predictions, aes(data, fill=model)) + geom_density(alpha = 0.2)
+ggplot(predictions, aes(probabilities, fill=model)) + geom_density(alpha = 0.2)
 ```
 	
-	
+The distribution of estimated probabilities is very different across the three models. With the pooled model, therere are 4 distinct peaks in the output probabilities, with roughly equal distribution on either side of 0.5. With the unpooled model, there is a single braod peak roughly in the range 0.25-0.55, with low density for very low and very high probabilities. The hierarchichal model displays a  trimodal distribution wth the first two peaks having larger density compared to the third. The unpooled and hierarchichal model have a shape which is slightly similar to a normal distribution centered around 0.45. 
+
 	(b) Create a scatter plot comparing predicted values from Unpooled and Hierarchical Models, making sure that the scale of the horizontal and vertical axes are the same, and that the plotting region is square rather than rectangular. Include on the plot the line $y=x$ (why do you think this is a useful line to superimpose?).  Briefly interpret the relationship between the probability estimates for these two models.  Are there particular features of the plot that highlight the intended benefits of using a hierarchical model over the unpooled analysis?  Briefly explain.
 
 ```{r}
 unpooled_hierarchical = data.frame(unpooled= scale01(unpooled.predictions), hierarchichal = scale01(hierarchichal.model$theta.pred))
 
-ggplot(unpooled_hierarchical, aes(x=hierarchichal, y=unpooled)) + geom_point() + coord_fixed() + geom_abline(intercept=0, slope=1)
+ggplot(unpooled_hierarchical, aes(x=unpooled, y=hierarchichal)) + geom_point() + coord_fixed() + geom_abline(intercept=0, slope=1)
 ```
+
+On the y = x line, the predicted probabilities from the two models are in agreement. The plot shows that the predictions from the hierarchichal model are overall slightly larger than the predicted probabilities from the unpooled model (greater number of points appear to be on the left hand side of the line). 
+
+One of the benefits of the hierarchihcal model is the smaller range in the value of hierarchichal model probabilities and few extreme values - with the unpooled model there are many points with either 0 or 1 probability but not as many for the hierarchichal model. 
+
+The unpooled  model makes assumptions about the error within each district and loses the benefits of the comparison of the errors among districts which the hierarchichal model takes into account.. 
 
 # Problem 3: AWS Preparation
 
 In prepartion for the upcoming Spark and Deep Learning modules, submit your AWS
 account information. This should have been created in Homework 0. We need specifically:
 
-* The email address associated with your AWS account
-* The email address associated with your Harvard ID, if different from above
-* Your AWS ID. This should be a 10 digit number. ([Instructions](http://docs.aws.amazon.com/IAM/latest/UserGuide/console_account-alias.html))
+* The email address associated with your AWS account: nikkiravi92@gmail.com
+* The email address associated with your Harvard ID, if different from above: nikhila_ravi@g.harvard.edu
+* Your AWS ID. This should be a 10 digit number.: 685330956565 ([Instructions](http://docs.aws.amazon.com/IAM/latest/UserGuide/console_account-alias.html))
 
 We need this information to enable GPU capable compute instances.
